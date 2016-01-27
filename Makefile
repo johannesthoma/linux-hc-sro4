@@ -1,6 +1,6 @@
 obj-m += distance.o
 
-KERNEL_DIR=$(HOME)/raspberry/build
+KERNEL_DIR=$(HOME)/raspberry/linux
 CC=arm-linux-gnueabihf-gcc
 
 all:
