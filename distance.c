@@ -212,7 +212,7 @@ static ssize_t sysfs_configure_store(struct class *class,
 	} else {
 		return -ENOSYS;
 	}
-	return 0;
+	return len;
 }
 
 static struct class_attribute hc_sro4_class_attrs[] = {
