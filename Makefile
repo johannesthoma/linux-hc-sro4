@@ -1,7 +1,7 @@
 obj-m += distance.o
 
-KERNEL_DIR=$(HOME)/raspberry/linux
-CC=arm-linux-gnueabihf-gcc
+KERNEL_DIR=/lib/modules/3.18.0-trunk-rpi/build
+# CC=arm-linux-gnueabihf-gcc
 
 all:
 	make -C $(KERNEL_DIR) M=$(PWD) modules
