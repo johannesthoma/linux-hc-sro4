@@ -33,6 +33,7 @@ struct hc_sro4 {
 	struct gpio_desc *trig_desc;
 	struct timeval time_triggered;
 	struct timeval time_echoed;
+	int echo_received;
 	struct mutex measurement_mutex;
 	wait_queue_head_t wait_for_echo;
 	unsigned long timeout;
@@ -101,9 +102,21 @@ static int destroy_hc_sro4(struct hc_sro4 *device)
 static irqreturn_t echo_received_irq(int irq, void *data)
 {
 	struct hc_sro4 *device = (struct hc_sro4*) data;
+	int val;
 	
-	do_gettimeofday(&device->time_echoed);	
-	wake_up_interruptible(&device->wait_for_echo);
+/*	if (device->echo_received) 
+		return IRQ_HANDLED; */
+
+	val = gpiod_get_value(device->echo_desc);
+	if (val == 1) {
+printk("interrupt val = 1\n");
+		do_gettimeofday(&device->time_triggered);
+	} else {
+printk("interrupt val = 0 (again?)\n");
+		do_gettimeofday(&device->time_echoed);	
+		device->echo_received = 1;
+		wake_up_interruptible(&device->wait_for_echo);
+	}
 	
 	return IRQ_HANDLED;
 }
@@ -123,9 +136,15 @@ static int do_measurement(struct hc_sro4 *device, unsigned long long *usecs_elap
 	}
 	mutex_unlock(&devices_mutex);
 
-/* TODO: if ACTIVE_LOW */
+        irq = gpiod_to_irq(device->echo_desc);
+        if (irq < 0)
+                return -EIO;
 
-        ret = request_any_context_irq(irq, echo_received_irq, IRQF_SHARED | IRQF_TRIGGER_FALLING, "hc_sro4", device);
+	device->echo_received = 0;
+
+printk("IRQ is %d\n", irq);
+/* TODO: if ACTIVE_LOW */
+        ret = request_any_context_irq(irq, echo_received_irq, IRQF_SHARED | IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING, "hc_sro4", device);
 	if (ret < 0) 
 		goto out_mutex;
 
@@ -139,9 +158,7 @@ static int do_measurement(struct hc_sro4 *device, unsigned long long *usecs_elap
 	udelay(10);
 	gpiod_set_value(device->trig_desc, 0);	 /* TODO: ?? or leave it until echo reveiced.. */
 
-	do_gettimeofday(&device->time_triggered);
-
-	timeout = wait_event_interruptible_timeout(device->wait_for_echo, 1, device->timeout);
+	timeout = wait_event_interruptible_timeout(device->wait_for_echo, device->echo_received, device->timeout);
 	if (timeout == 0)
 		ret = -ETIMEDOUT;
 	else if (timeout < 0)
