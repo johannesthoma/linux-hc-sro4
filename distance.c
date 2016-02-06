@@ -44,7 +44,7 @@ struct hc_sro4 {
 static LIST_HEAD(hc_sro4_devices);
 static DEFINE_MUTEX(devices_mutex);
 
-static struct hc_sro4* create_hc_sro4(int echo, int trig, unsigned long timeout)
+static struct hc_sro4* create_hc_sro4(int trig, int echo, unsigned long timeout)
 {
 	struct hc_sro4 *new;
 	int err;
