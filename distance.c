@@ -109,14 +109,14 @@ static irqreturn_t echo_received_irq(int irq, void *data)
 
 	do_gettimeofday(&irq_tv);
 	
-printk("int\n");
+// printk("int\n");
 	if (!device->device_triggered)
 		return IRQ_HANDLED;
 	if (device->echo_received) 
 		return IRQ_HANDLED;
 
 	val = gpiod_get_value(device->echo_desc);
-printk("measuring val = %d\n", val);
+// printk("measuring val = %d\n", val);
 	if (val == 1) {
 		device->time_triggered = irq_tv;
 	} else {
@@ -151,19 +151,18 @@ static int do_measurement(struct hc_sro4 *device, unsigned long long *usecs_elap
 	device->echo_received = 0;
 	device->device_triggered = 0;
 
-#if 0
 // printk("IRQ is %d\n", irq);
 /* TODO: if ACTIVE_LOW */
         ret = request_any_context_irq(irq, echo_received_irq, IRQF_SHARED | IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING, "hc_sro4", device);
 	if (ret < 0) 
 		goto out_mutex;
-#endif
 
 	gpiod_set_value(device->trig_desc, 1);
 	udelay(1000);
 	device->device_triggered = 1;
 	gpiod_set_value(device->trig_desc, 0);
 
+#if 0
 	now = jiffies;
 	while (gpiod_get_value(device->echo_desc) == 0 && jiffies < now + device->timeout) ;
 	if (jiffies >= now+device->timeout) { mutex_unlock(&device->measurement_mutex); return -ETIMEDOUT; }
@@ -173,6 +172,7 @@ static int do_measurement(struct hc_sro4 *device, unsigned long long *usecs_elap
 	while (gpiod_get_value(device->echo_desc) == 1 && jiffies < now + device->timeout) ;
 	if (jiffies >= now+device->timeout) { mutex_unlock(&device->measurement_mutex); return -ETIMEDOUT; }
 	do_gettimeofday(&device->time_echoed);
+#endif
 
 #if 0
         ret = gpiochip_lock_as_irq(gpiod_to_chip(device->echo_desc), device->gpio_echo);
@@ -180,23 +180,19 @@ static int do_measurement(struct hc_sro4 *device, unsigned long long *usecs_elap
 		goto out_irq;
 #endif
 
-#if 0
 	timeout = wait_event_interruptible_timeout(device->wait_for_echo, device->echo_received, device->timeout);
 	if (timeout == 0)
 		ret = -ETIMEDOUT;
 	else if (timeout < 0)
 		ret = timeout;
 	else {
-#endif 
 		*usecs_elapsed = 
 			(device->time_echoed.tv_sec - device->time_triggered.tv_sec) * 1000000 + 
 			(device->time_echoed.tv_usec - device->time_triggered.tv_usec);
 		ret = 0;
-#if 0 
 	}
 out_irq:
 	free_irq(irq, device);
-#endif
 out_mutex:
 	mutex_unlock(&device->measurement_mutex);
 
