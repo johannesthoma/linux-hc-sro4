@@ -140,7 +140,7 @@ static irqreturn_t echo_received_irq(int irq, void *data)
 static int do_measurement(struct hc_sro4 *device,
 			  unsigned long long *usecs_elapsed)
 {
-	unsigned long timeout;
+	long timeout;
 	int irq;
 	int ret;
 
@@ -183,7 +183,7 @@ printk("request_any_context_irq: ret is %d\n", ret);
 
 	timeout = wait_event_interruptible_timeout(device->wait_for_echo,
 				device->echo_received, device->timeout);
-printk("wait_event_interruptible_timeout: ret is %d\n", timeout);
+printk("wait_event_interruptible_timeout: ret is %ld\n", timeout);
 	if (timeout == 0)
 		ret = -ETIMEDOUT;
 	else if (timeout < 0)
@@ -268,6 +268,8 @@ static int remove_sensor(struct hc_sro4 *rip_sensor)
 	if (dev == NULL)
 		return -ENODEV;
 
+	mutex_lock(&rip_sensor->measurement_mutex);
+			/* wait until measurement has finished */
 	list_del(&rip_sensor->list);
 	kfree(rip_sensor);   /* ?? double free ?? */
 
