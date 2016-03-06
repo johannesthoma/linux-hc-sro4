@@ -9,7 +9,6 @@
 */
 
 /* TODO: check this for measure / delete races ! fix locking */
-/* TODO: destroy */
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -241,12 +240,11 @@ static ssize_t sysfs_configure_store(struct class *class,
 		list_for_each_entry(rip_sensor, &hc_sro4_devices, list) {
 			if (rip_sensor->gpio_echo == echo && 
 			    rip_sensor->gpio_trig == trig)
-				break;
+				goto found;
 		}
-		if (rip_sensor == NULL) {
-			mutex_unlock(&devices_mutex);
-			return -ENOENT;
-		}
+		mutex_unlock(&devices_mutex);
+		return -ENODEV;
+found:
 		dev = class_find_device(class, NULL, rip_sensor, match_device);
 		if (dev == NULL) {
 			mutex_unlock(&devices_mutex);
