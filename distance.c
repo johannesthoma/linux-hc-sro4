@@ -160,10 +160,11 @@ static int do_measurement(struct hc_sro4 *device,
 	device->echo_received = 0;
 	device->device_triggered = 0;
 
-/* TODO: if ACTIVE_LOW */
 	ret = request_any_context_irq(irq, echo_received_irq,
 		IRQF_SHARED | IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
 		"hc_sro4", device);
+
+printk("request_any_context_irq: ret is %d\n", ret);
 
 	if (ret < 0)
 		goto out_mutex;
@@ -182,6 +183,7 @@ static int do_measurement(struct hc_sro4 *device,
 
 	timeout = wait_event_interruptible_timeout(device->wait_for_echo,
 				device->echo_received, device->timeout);
+printk("wait_event_interruptible_timeout: ret is %d\n", timeout);
 	if (timeout == 0)
 		ret = -ETIMEDOUT;
 	else if (timeout < 0)
@@ -210,7 +212,7 @@ static ssize_t sysfs_do_measurement(struct device *dev,
 	unsigned long long usecs_elapsed;
 	int status;
 
-	mutex_lock(&devices_mutex);  /* TODO: ?? */
+	mutex_lock(&devices_mutex);
 	status = do_measurement(sensor, &usecs_elapsed);
 
 	if (status < 0)
