@@ -150,6 +150,8 @@ static int do_measurement(struct hc_sro4 *device, unsigned long long *usecs_elap
 	}
 	mutex_unlock(&devices_mutex);
 
+	msleep(60);	/* wait 60 ms between measurements. now, a while true ; do cat measure ; done should work */
+
         irq = gpiod_to_irq(device->echo_desc);
         if (irq < 0)
                 return -EIO;

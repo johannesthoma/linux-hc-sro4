@@ -3,5 +3,5 @@ do
 	dist=`cat /sys/class/distance-sensor/distance_23_24/measure`
         cm=$[ $dist * 17150 ]
 	printf "%d.%06d cm\n" $[ $cm/1000000 ] $[ $cm%1000000 ]
-	sleep 1
+#	sleep 1
 done
