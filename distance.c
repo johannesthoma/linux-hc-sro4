@@ -164,8 +164,6 @@ static int do_measurement(struct hc_sro4 *device,
 		IRQF_SHARED | IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
 		"hc_sro4", device);
 
-printk("request_any_context_irq: ret is %d\n", ret);
-
 	if (ret < 0)
 		goto out_mutex;
 
@@ -183,7 +181,6 @@ printk("request_any_context_irq: ret is %d\n", ret);
 
 	timeout = wait_event_interruptible_timeout(device->wait_for_echo,
 				device->echo_received, device->timeout);
-printk("wait_event_interruptible_timeout: ret is %d\n", timeout);
 	if (timeout == 0)
 		ret = -ETIMEDOUT;
 	else if (timeout < 0)
