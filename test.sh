@@ -1,8 +1,7 @@
-dist1=`cat /sys/class/distance-sensor/distance_23_24/measure`
 while true
 do
 	dist=`cat /sys/class/distance-sensor/distance_23_24/measure`
-	rel=$[ ($dist-$dist1)*10000 / $dist1 ]
-	echo $[ $rel/100 ].$[ $rel%100 ]
+        cm=$[ $dist * 17150 ]
+	printf "%d.%06d cm\n" $[ $cm/1000000 ] $[ $cm%1000000 ]
 	sleep 1
 done
