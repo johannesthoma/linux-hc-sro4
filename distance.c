@@ -273,12 +273,16 @@ static struct class hc_sro4_class = {
 
 static int __init init_hc_sro4(void)
 {
-	printk(KERN_INFO "Hello world\n");
-
         return class_register(&hc_sro4_class);
 }
 
+static void exit_hc_sro4(void)
+{
+        class_unregister(&hc_sro4_class);
+}
+
 module_init(init_hc_sro4);
+module_exit(exit_hc_sro4);
 	
 MODULE_AUTHOR("Johannes Thoma");
 MODULE_DESCRIPTION("Distance measurement for the HC-SRO4 ultrasonic distance sensor for the raspberry pi");
