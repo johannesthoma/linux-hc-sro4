@@ -1,7 +1,28 @@
 /* Precise measurements of time delta between sending a trigger signal
    to the HC-SRO4 distance sensor and receiving the echo signal from
-   the sensor back. This has to be precise in the us range. We (for now)
-   do this with local_irq_disable and polling (with timeout). 
+   the sensor back. This has to be precise in the usecs range. We
+   use trigger interrupts to measure the signal, so no busy wait :)
+
+   This supports an (in theory) unlimited number of HC-SRO4 devices.
+   To add a device, do a (as root):
+
+	# echo 23 24 1000 > /sys/class/distance-sensor/configure
+
+   (23 is the trigger GPIO, 24 is the echo GPIO and 1000 is a timeout in
+    milliseconds)
+
+   Then a directory appears with a file measure in it. To measure, do a
+
+	# cat /sys/class/distance-sensor/distance_23_24/measure
+
+   You'll receive the length of the echo signal in usecs. To convert (roughly)
+   to centimeters multiply by 17150 and divide by 1e6.
+
+   To deconfigure the device, do a 
+
+	# echo -23 24 > /sys/class/distance-sensor/configure
+
+   (normally not needed).
 
    DO NOT attach your HC-SRO4's echo pin directly to the raspberry, since
    it runs with 5V while raspberry expects 3V on the GPIO inputs.
@@ -122,7 +143,6 @@ static int do_measurement(struct hc_sro4 *device, unsigned long long *usecs_elap
 	unsigned long timeout;
 	int irq;
 	int ret;
-	unsigned long now;
 
 	if (!mutex_trylock(&device->measurement_mutex)) {
 		mutex_unlock(&devices_mutex);
@@ -165,7 +185,9 @@ static int do_measurement(struct hc_sro4 *device, unsigned long long *usecs_elap
 			(device->time_echoed.tv_usec - device->time_triggered.tv_usec);
 		ret = 0;
 	}
+#if 0
 out_irq:
+#endif
 	free_irq(irq, device);
 out_mutex:
 	mutex_unlock(&device->measurement_mutex);
@@ -206,10 +228,42 @@ static const struct attribute_group *sensor_groups[] = {
 	NULL
 };
 
+static ssize_t sysfs_configure_store(struct class *class,
+				struct class_attribute *attr,
+				const char *buf, size_t len);
+
+static struct class_attribute hc_sro4_class_attrs[] = {
+	__ATTR(configure, 0200, NULL, sysfs_configure_store),
+	__ATTR_NULL,
+};
+
+static struct class hc_sro4_class = {
+	.name = "distance-sensor",
+	.owner = THIS_MODULE,
+	.class_attrs = hc_sro4_class_attrs
+};
+
 
 static int match_device(struct device *dev, const void *data)
 {
         return dev_get_drvdata(dev) == data;
+}
+
+static int remove_sensor(struct hc_sro4 *rip_sensor)
+	/* must be called with devices_mutex held. */
+{
+	struct device *dev;
+	dev = class_find_device(&hc_sro4_class, NULL, rip_sensor, match_device);
+	if (dev == NULL) {
+		return -ENODEV;
+	}
+	list_del(&rip_sensor->list);
+	kfree(rip_sensor);   /* ?? double free ?? */
+		
+	device_unregister(dev);
+	put_device(dev);
+
+	return 0;
 }
 
 static ssize_t sysfs_configure_store(struct class *class,
@@ -220,7 +274,9 @@ static ssize_t sysfs_configure_store(struct class *class,
 	const char *s = buf;
 	int trig, echo, timeout;
 	struct hc_sro4 *new_sensor, *rip_sensor;
-	struct device *dev;
+	int err;
+
+printk("class %p myclass %p\n", class, &hc_sro4_class);
 
 	if (buf[0] == '-' || buf[0] == '+') s++;
 	if (add) {
@@ -245,31 +301,13 @@ static ssize_t sysfs_configure_store(struct class *class,
 		mutex_unlock(&devices_mutex);
 		return -ENODEV;
 found:
-		dev = class_find_device(class, NULL, rip_sensor, match_device);
-		if (dev == NULL) {
-			mutex_unlock(&devices_mutex);
-			return -ENODEV;
-		}
-		list_del(&rip_sensor->list);
-		kfree(rip_sensor);
+		err = remove_sensor(rip_sensor);
 		mutex_unlock(&devices_mutex);
-		
-		device_unregister(dev);
-		put_device(dev);
+		if (err < 0)
+			return err;
 	}
 	return len;
 }
-
-static struct class_attribute hc_sro4_class_attrs[] = {
-	__ATTR(configure, 0200, NULL, sysfs_configure_store),
-	__ATTR_NULL,
-};
-
-static struct class hc_sro4_class = {
-	.name = "distance-sensor",
-	.owner = THIS_MODULE,
-	.class_attrs = hc_sro4_class_attrs
-};
 
 static int __init init_hc_sro4(void)
 {
@@ -278,6 +316,14 @@ static int __init init_hc_sro4(void)
 
 static void exit_hc_sro4(void)
 {
+	struct hc_sro4 *rip_sensor, *tmp;
+
+	mutex_lock(&devices_mutex);
+	list_for_each_entry_safe(rip_sensor, tmp, &hc_sro4_devices, list) {
+		remove_sensor(rip_sensor);   /* ignore errors */
+	}
+	mutex_unlock(&devices_mutex);
+
         class_unregister(&hc_sro4_class);
 }
 
