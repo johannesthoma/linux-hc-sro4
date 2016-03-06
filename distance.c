@@ -90,17 +90,6 @@ static struct hc_sro4* create_hc_sro4(int trig, int echo, unsigned long timeout)
 	return new;
 }
 
-static int destroy_hc_sro4(struct hc_sro4 *device)
-{
-	mutex_lock(&devices_mutex);
-	mutex_lock(&device->measurement_mutex);
-	list_del(&device->list);
-	mutex_unlock(&devices_mutex);
-	kfree(device);
-
-	return 0;
-}
-
 static irqreturn_t echo_received_irq(int irq, void *data)
 {
 	struct hc_sro4 *device = (struct hc_sro4*) data;
@@ -218,6 +207,12 @@ static const struct attribute_group *sensor_groups[] = {
 	NULL
 };
 
+
+static int match_device(struct device *dev, const void *data)
+{
+        return dev_get_drvdata(dev) == data;
+}
+
 static ssize_t sysfs_configure_store(struct class *class,
 				struct class_attribute *attr,
 				const char *buf, size_t len)
@@ -225,7 +220,8 @@ static ssize_t sysfs_configure_store(struct class *class,
 	int add = buf[0] != '-';
 	const char *s = buf;
 	int trig, echo, timeout;
-	struct hc_sro4 *new_sensor;
+	struct hc_sro4 *new_sensor, *rip_sensor;
+	struct device *dev;
 
 	if (buf[0] == '-' || buf[0] == '+') s++;
 	if (add) {
@@ -238,7 +234,30 @@ static ssize_t sysfs_configure_store(struct class *class,
 
 		device_create_with_groups(class, NULL, MKDEV(0, 0), new_sensor, sensor_groups, "distance_%d_%d", trig, echo);
 	} else {
-		return -ENOSYS;
+		if (sscanf(s, "%d %d", &trig, &echo) != 2)
+			return -EINVAL;
+
+		mutex_lock(&devices_mutex);
+		list_for_each_entry(rip_sensor, &hc_sro4_devices, list) {
+			if (rip_sensor->gpio_echo == echo && 
+			    rip_sensor->gpio_trig == trig)
+				break;
+		}
+		if (rip_sensor == NULL) {
+			mutex_unlock(&devices_mutex);
+			return -ENOENT;
+		}
+		dev = class_find_device(class, NULL, rip_sensor, match_device);
+		if (dev == NULL) {
+			mutex_unlock(&devices_mutex);
+			return -ENODEV;
+		}
+		list_del(&rip_sensor->list);
+		kfree(rip_sensor);
+		mutex_unlock(&devices_mutex);
+		
+		device_unregister(dev);
+		put_device(dev);
 	}
 	return len;
 }
