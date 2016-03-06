@@ -109,14 +109,12 @@ static irqreturn_t echo_received_irq(int irq, void *data)
 
 	do_gettimeofday(&irq_tv);
 	
-// printk("int\n");
 	if (!device->device_triggered)
 		return IRQ_HANDLED;
 	if (device->echo_received) 
 		return IRQ_HANDLED;
 
 	val = gpiod_get_value(device->echo_desc);
-// printk("measuring val = %d\n", val);
 	if (val == 1) {
 		device->time_triggered = irq_tv;
 	} else {
@@ -158,21 +156,9 @@ static int do_measurement(struct hc_sro4 *device, unsigned long long *usecs_elap
 		goto out_mutex;
 
 	gpiod_set_value(device->trig_desc, 1);
-	udelay(1000);
+	udelay(10);
 	device->device_triggered = 1;
 	gpiod_set_value(device->trig_desc, 0);
-
-#if 0
-	now = jiffies;
-	while (gpiod_get_value(device->echo_desc) == 0 && jiffies < now + device->timeout) ;
-	if (jiffies >= now+device->timeout) { mutex_unlock(&device->measurement_mutex); return -ETIMEDOUT; }
-
-	do_gettimeofday(&device->time_triggered);
-	now = jiffies;
-	while (gpiod_get_value(device->echo_desc) == 1 && jiffies < now + device->timeout) ;
-	if (jiffies >= now+device->timeout) { mutex_unlock(&device->measurement_mutex); return -ETIMEDOUT; }
-	do_gettimeofday(&device->time_echoed);
-#endif
 
 #if 0
         ret = gpiochip_lock_as_irq(gpiod_to_chip(device->echo_desc), device->gpio_echo);
