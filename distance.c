@@ -29,8 +29,6 @@
 
 */
 
-/* TODO: check this for measure / delete races ! fix locking */
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/timekeeping.h>
@@ -47,10 +45,10 @@
 #include <linux/sched.h>
 
 struct hc_sro4 {
-	int gpio_echo;
 	int gpio_trig;
-	struct gpio_desc *echo_desc;
+	int gpio_echo;
 	struct gpio_desc *trig_desc;
+	struct gpio_desc *echo_desc;
 	struct timeval time_triggered;
 	struct timeval time_echoed;
 	int echo_received;
@@ -65,6 +63,7 @@ static LIST_HEAD(hc_sro4_devices);
 static DEFINE_MUTEX(devices_mutex);
 
 static struct hc_sro4 *create_hc_sro4(int trig, int echo, unsigned long timeout)
+		/* must be called with devices_mutex held */
 {
 	struct hc_sro4 *new;
 	int err;
@@ -102,9 +101,7 @@ static struct hc_sro4 *create_hc_sro4(int trig, int echo, unsigned long timeout)
 	init_waitqueue_head(&new->wait_for_echo);
 	new->timeout = timeout;
 
-	mutex_lock(&devices_mutex);
 	list_add_tail(&new->list, &hc_sro4_devices);
-	mutex_unlock(&devices_mutex);
 
 	return new;
 }
@@ -140,7 +137,7 @@ static irqreturn_t echo_received_irq(int irq, void *data)
 static int do_measurement(struct hc_sro4 *device,
 			  unsigned long long *usecs_elapsed)
 {
-	unsigned long timeout;
+	long timeout;
 	int irq;
 	int ret;
 
@@ -181,6 +178,7 @@ static int do_measurement(struct hc_sro4 *device,
 
 	timeout = wait_event_interruptible_timeout(device->wait_for_echo,
 				device->echo_received, device->timeout);
+
 	if (timeout == 0)
 		ret = -ETIMEDOUT;
 	else if (timeout < 0)
@@ -251,6 +249,18 @@ static struct class hc_sro4_class = {
 };
 
 
+static struct hc_sro4 *find_sensor(int trig, int echo)
+{
+	struct hc_sro4 *sensor;
+
+	list_for_each_entry(sensor, &hc_sro4_devices, list) {
+		if (sensor->gpio_trig == trig &&
+		    sensor->gpio_echo == echo)
+			return sensor;
+	}
+	return NULL;
+}
+
 static int match_device(struct device *dev, const void *data)
 {
 	return dev_get_drvdata(dev) == data;
@@ -265,6 +275,8 @@ static int remove_sensor(struct hc_sro4 *rip_sensor)
 	if (dev == NULL)
 		return -ENODEV;
 
+	mutex_lock(&rip_sensor->measurement_mutex);
+			/* wait until measurement has finished */
 	list_del(&rip_sensor->list);
 	kfree(rip_sensor);   /* ?? double free ?? */
 
@@ -291,7 +303,14 @@ static ssize_t sysfs_configure_store(struct class *class,
 		if (sscanf(s, "%d %d %d", &trig, &echo, &timeout) != 3)
 			return -EINVAL;
 
+		mutex_lock(&devices_mutex);
+		if (find_sensor(trig, echo)) {
+			mutex_unlock(&devices_mutex);
+			return -EEXIST;
+		}
+
 		new_sensor = create_hc_sro4(trig, echo, timeout);
+		mutex_unlock(&devices_mutex);
 		if (IS_ERR(new_sensor))
 			return PTR_ERR(new_sensor);
 
@@ -302,14 +321,11 @@ static ssize_t sysfs_configure_store(struct class *class,
 			return -EINVAL;
 
 		mutex_lock(&devices_mutex);
-		list_for_each_entry(rip_sensor, &hc_sro4_devices, list) {
-			if (rip_sensor->gpio_echo == echo &&
-			    rip_sensor->gpio_trig == trig)
-				goto found;
+		rip_sensor = find_sensor(trig, echo);
+		if (rip_sensor == NULL) {
+			mutex_unlock(&devices_mutex);
+			return -ENODEV;
 		}
-		mutex_unlock(&devices_mutex);
-		return -ENODEV;
-found:
 		err = remove_sensor(rip_sensor);
 		mutex_unlock(&devices_mutex);
 		if (err < 0)
