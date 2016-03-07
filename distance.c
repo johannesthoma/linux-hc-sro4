@@ -169,12 +169,10 @@ static int do_measurement(struct hc_sro4 *device,
 	device->device_triggered = 1;
 	gpiod_set_value(device->trig_desc, 0);
 
-#if 0
 	ret = gpiochip_lock_as_irq(gpiod_to_chip(device->echo_desc),
 				   device->gpio_echo);
 	if (ret < 0)
 		goto out_irq;
-#endif
 
 	timeout = wait_event_interruptible_timeout(device->wait_for_echo,
 				device->echo_received, device->timeout);
@@ -189,9 +187,7 @@ static int do_measurement(struct hc_sro4 *device,
 	(device->time_echoed.tv_usec - device->time_triggered.tv_usec);
 		ret = 0;
 	}
-#if 0
 out_irq:
-#endif
 	free_irq(irq, device);
 out_mutex:
 	mutex_unlock(&device->measurement_mutex);
