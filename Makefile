@@ -1,4 +1,4 @@
-obj-m += distance.o
+obj-m += hc-sro4.o
 
 # KERNEL_DIR=/lib/modules/3.18.0-trunk-rpi/build
 KERNEL_DIR=../linux
