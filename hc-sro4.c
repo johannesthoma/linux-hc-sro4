@@ -1,33 +1,33 @@
 /* Precise measurements of time delta between sending a trigger signal
-   to the HC-SRO4 distance sensor and receiving the echo signal from
-   the sensor back. This has to be precise in the usecs range. We
-   use trigger interrupts to measure the signal, so no busy wait :)
-
-   This supports an (in theory) unlimited number of HC-SRO4 devices.
-   To add a device, do a (as root):
-
-	# echo 23 24 1000 > /sys/class/distance-sensor/configure
-
-   (23 is the trigger GPIO, 24 is the echo GPIO and 1000 is a timeout in
-    milliseconds)
-
-   Then a directory appears with a file measure in it. To measure, do a
-
-	# cat /sys/class/distance-sensor/distance_23_24/measure
-
-   You'll receive the length of the echo signal in usecs. To convert (roughly)
-   to centimeters multiply by 17150 and divide by 1e6.
-
-   To deconfigure the device, do a
-
-	# echo -23 24 > /sys/class/distance-sensor/configure
-
-   (normally not needed).
-
-   DO NOT attach your HC-SRO4's echo pin directly to the raspberry, since
-   it runs with 5V while raspberry expects 3V on the GPIO inputs.
-
-*/
+ * to the HC-SRO4 distance sensor and receiving the echo signal from
+ * the sensor back. This has to be precise in the usecs range. We
+ * use trigger interrupts to measure the signal, so no busy wait :)
+ *
+ * This supports an (in theory) unlimited number of HC-SRO4 devices.
+ * To add a device, do a (as root):
+ *
+ *	# echo 23 24 1000 > /sys/class/distance-sensor/configure
+ *
+ * (23 is the trigger GPIO, 24 is the echo GPIO and 1000 is a timeout in
+ *  milliseconds)
+ *
+ * Then a directory appears with a file measure in it. To measure, do a
+ *
+ *	# cat /sys/class/distance-sensor/distance_23_24/measure
+ *
+ * You'll receive the length of the echo signal in usecs. To convert (roughly)
+ * to centimeters multiply by 17150 and divide by 1e6.
+ *
+ * To deconfigure the device, do a
+ *
+ *	# echo -23 24 > /sys/class/distance-sensor/configure
+ *
+ * (normally not needed).
+ *
+ * DO NOT attach your HC-SRO4's echo pin directly to the raspberry, since
+ * it runs with 5V while raspberry expects 3V on the GPIO inputs.
+ *
+ */
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -132,7 +132,8 @@ static irqreturn_t echo_received_irq(int irq, void *data)
 }
 
 /* devices_mutex must be held by caller, so nobody deletes the device
-   before we lock it. */
+ * before we lock it.
+ */
 
 static int do_measurement(struct hc_sro4 *device,
 			  unsigned long long *usecs_elapsed)
@@ -147,8 +148,10 @@ static int do_measurement(struct hc_sro4 *device,
 	}
 	mutex_unlock(&devices_mutex);
 
-	msleep(60);	/* wait 60 ms between measurements.
-		now, a while true ; do cat measure ; done should work */
+	msleep(60);
+		/* wait 60 ms between measurements.
+		 * now, a while true ; do cat measure ; done should work
+		 */
 
 	irq = gpiod_to_irq(device->echo_desc);
 	if (irq < 0)
@@ -187,6 +190,7 @@ static int do_measurement(struct hc_sro4 *device,
 	(device->time_echoed.tv_usec - device->time_triggered.tv_usec);
 		ret = 0;
 	}
+/* TODO: unlock_as_irq */
 out_irq:
 	free_irq(irq, device);
 out_mutex:
