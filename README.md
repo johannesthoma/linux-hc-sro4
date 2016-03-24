@@ -20,9 +20,9 @@ Building
 
 You have two options to compile this driver for the Raspberry Pi:
 
-.) either compile it on a linux host using a cross development environment
+- either compile it on a linux host using a cross development environment
    (recommended)
-.) or directly on the raspberry
+- or directly on the raspberry
 
 To compile it using a cross development environment you'll need to install
 a cross development environment first (ARM cross compiler) and then obtain
@@ -31,9 +31,10 @@ kernel), see https://www.raspberrypi.org/documentation/linux/kernel
 for instructions. Once the kernel is compiled and installed on the 
 raspberry edit the Makefile of this repo so it says something like:
 
-  ARCH=arm
+```  ARCH=arm
   CROSS_COMPILE=$(HOME)/raspberry/cross-dev/tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian-x64/bin/arm-linux-gnueabihf-
   KERNEL_DIR=$(HOME)/raspberry/linux
+```
 
 Type 
 
