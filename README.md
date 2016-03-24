@@ -38,12 +38,16 @@ raspberry edit the Makefile of this repo so it says something like:
 
 Type 
 
+```
   make 
+```
 
 and keep your fingers crossed ;) The result should be a file named hc-sro4.ko
 which is the linux kernel module to be inserted using:
 
+```
   insmod hc-sro4.ko
+```
 
 on the raspberry. 
 
@@ -67,21 +71,27 @@ Once insmod works, you'll find a new directory under /sys/class/distance
 This supports an (in theory) unlimited number of HC-SRO4 devices.
 To add a device, do a (as root):
 
+```
    # echo 23 24 1000 > /sys/class/distance-sensor/configure
+```
 
 (23 is the trigger GPIO, 24 is the echo GPIO and 1000 is a timeout in
 milliseconds)
 
 Then a directory appears with a file measure in it. To measure, do a
 
+```
    # cat /sys/class/distance-sensor/distance_23_24/measure
+```
 
 You'll receive the length of the echo signal in usecs. To convert (roughly)
 to centimeters multiply by 17150 and divide by 1e6.
 
 To deconfigure the device, do a
 
+```
    # echo -23 24 > /sys/class/distance-sensor/configure
+```
 
 (normally not needed).
 
