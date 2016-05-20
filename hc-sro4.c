@@ -278,7 +278,7 @@ static int remove_sensor(struct hc_sro4 *rip_sensor)
 	mutex_lock(&rip_sensor->measurement_mutex);
 			/* wait until measurement has finished */
 	list_del(&rip_sensor->list);
-	kfree(rip_sensor);   /* ?? double free ?? */
+	kfree(rip_sensor);   /* TODO: ?? double free ?? */
 
 	device_unregister(dev);
 	put_device(dev);
@@ -356,6 +356,6 @@ module_init(init_hc_sro4);
 module_exit(exit_hc_sro4);
 
 MODULE_AUTHOR("Johannes Thoma");
-MODULE_DESCRIPTION("Distance measurement for the HC-SRO4 ultrasonic distance sensor for the raspberry pi");
+MODULE_DESCRIPTION("Distance measurement for the HC-SRO4 ultrasonic distance sensor");
 MODULE_LICENSE("GPL");
 
