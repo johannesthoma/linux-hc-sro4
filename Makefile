@@ -5,6 +5,7 @@ CROSS_COMPILE=$(HOME)/raspberry/cross-dev/tools/arm-bcm2708/gcc-linaro-arm-linux
 # KERNEL_DIR=/lib/modules/3.18.0-trunk-rpi/build
 KERNEL_DIR=../linux
 # CC=arm-linux-gnueabihf-gcc
+# CFLAGS_MODULE    += -mlong-calls
 
 all:
 	make -C $(KERNEL_DIR) M=$(PWD) modules ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE)

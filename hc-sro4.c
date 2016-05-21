@@ -44,6 +44,10 @@
 #include <linux/delay.h>
 #include <linux/sched.h>
 
+#include <linux/iio/iio.h>
+#include <linux/iio/trigger.h>
+#include <linux/iio/sw_trigger.h>
+
 struct hc_sro4 {
 	int gpio_trig;
 	int gpio_echo;
@@ -56,10 +60,13 @@ struct hc_sro4 {
 	struct mutex measurement_mutex;
 	wait_queue_head_t wait_for_echo;
 	unsigned long timeout;
-	struct list_head list;
+	struct iio_sw_trigger swt;
 };
 
-static LIST_HEAD(hc_sro4_devices);
+static struct config_item_type iio_hc_sro4_type = {
+        .ct_owner = THIS_MODULE,
+};
+
 static DEFINE_MUTEX(devices_mutex);
 
 static struct hc_sro4 *create_hc_sro4(int trig, int echo, unsigned long timeout)
@@ -68,7 +75,7 @@ static struct hc_sro4 *create_hc_sro4(int trig, int echo, unsigned long timeout)
 	struct hc_sro4 *new;
 	int err;
 
-	new = kmalloc(sizeof(*new), GFP_KERNEL);
+	new = kzalloc(sizeof(*new), GFP_KERNEL);
 	if (new == NULL)
 		return ERR_PTR(-ENOMEM);
 
@@ -100,8 +107,6 @@ static struct hc_sro4 *create_hc_sro4(int trig, int echo, unsigned long timeout)
 	mutex_init(&new->measurement_mutex);
 	init_waitqueue_head(&new->wait_for_echo);
 	new->timeout = timeout;
-
-	list_add_tail(&new->list, &hc_sro4_devices);
 
 	return new;
 }
@@ -233,6 +238,7 @@ static const struct attribute_group *sensor_groups[] = {
 	NULL
 };
 
+#if 0
 static ssize_t sysfs_configure_store(struct class *class,
 				struct class_attribute *attr,
 				const char *buf, size_t len);
@@ -248,18 +254,6 @@ static struct class hc_sro4_class = {
 	.class_attrs = hc_sro4_class_attrs
 };
 
-
-static struct hc_sro4 *find_sensor(int trig, int echo)
-{
-	struct hc_sro4 *sensor;
-
-	list_for_each_entry(sensor, &hc_sro4_devices, list) {
-		if (sensor->gpio_trig == trig &&
-		    sensor->gpio_echo == echo)
-			return sensor;
-	}
-	return NULL;
-}
 
 static int match_device(struct device *dev, const void *data)
 {
@@ -277,14 +271,14 @@ static int remove_sensor(struct hc_sro4 *rip_sensor)
 
 	mutex_lock(&rip_sensor->measurement_mutex);
 			/* wait until measurement has finished */
-	list_del(&rip_sensor->list);
-	kfree(rip_sensor);   /* TODO: ?? double free ?? */
+	kfree(rip_sensor);
 
 	device_unregister(dev);
 	put_device(dev);
 
 	return 0;
 }
+
 
 static ssize_t sysfs_configure_store(struct class *class,
 				struct class_attribute *attr,
@@ -334,26 +328,101 @@ static ssize_t sysfs_configure_store(struct class *class,
 	return len;
 }
 
-static int __init init_hc_sro4(void)
+#endif
+
+static int iio_trig_hc_sro4_set_state(struct iio_trigger *trig, bool state)
 {
-	return class_register(&hc_sro4_class);
+        struct iio_hrtimer_info *trig_info;
+
+        trig_info = iio_trigger_get_drvdata(trig);
+
+        if (state)
+		printk(KERN_INFO "starting HC_SRO4\n");
+        else
+		printk(KERN_INFO "stopping HC_SRO4\n");
+
+        return 0;
 }
 
-static void exit_hc_sro4(void)
-{
-	struct hc_sro4 *rip_sensor, *tmp;
 
-	mutex_lock(&devices_mutex);
-	list_for_each_entry_safe(rip_sensor, tmp, &hc_sro4_devices, list) {
-		remove_sensor(rip_sensor);   /* ignore errors */
+static const struct iio_trigger_ops iio_hc_sro4_trigger_ops = {
+        .owner = THIS_MODULE,
+        .set_trigger_state = iio_trig_hc_sro4_set_state,
+};
+
+static struct iio_sw_trigger *iio_trig_hc_sro4_probe(const char *name)
+{
+	struct hc_sro4 *hc_sro4;
+	int ret;
+
+printk(KERN_INFO "sensor add name = %s\n", name);
+
+	hc_sro4 = create_hc_sro4(23, 24, 3000);  
+		/* TODO: make this configurable via configfs */
+	if (IS_ERR(hc_sro4))
+		return ERR_PTR(PTR_ERR(hc_sro4));
+
+printk(KERN_INFO "create sensor ok\n");
+
+	hc_sro4->swt.trigger = iio_trigger_alloc("%s", name);
+	if (!hc_sro4->swt.trigger) {
+		ret = -ENOMEM;
+		goto err_free_sensor;
 	}
-	mutex_unlock(&devices_mutex);
+	iio_trigger_set_drvdata(hc_sro4->swt.trigger, hc_sro4);
+	hc_sro4->swt.trigger->ops = &iio_hc_sro4_trigger_ops;
+	hc_sro4->swt.trigger->dev.groups = sensor_groups;
 
-	class_unregister(&hc_sro4_class);
+	ret = iio_trigger_register(hc_sro4->swt.trigger);
+	if (ret)
+		goto err_free_trigger;
+
+/*	kfree(hc_sro4);
+	return ERR_PTR(-ENOMEM); */
+
+printk(KERN_INFO "sensor before group init type name name = %s\n", name);
+/* printk(KERN_INFO "group: %p\n", hc_sro4->swt.group); */
+        iio_swt_group_init_type_name(&hc_sro4->swt, name, &iio_hc_sro4_type);
+
+printk(KERN_INFO "sensor add ok\n");
+	return &hc_sro4->swt;
+
+err_free_trigger:
+	iio_trigger_free(hc_sro4->swt.trigger);
+err_free_sensor:
+	kfree(hc_sro4);
+
+	return ERR_PTR(ret);
 }
 
-module_init(init_hc_sro4);
-module_exit(exit_hc_sro4);
+static int iio_trig_hc_sro4_remove(struct iio_sw_trigger *swt)
+{
+	struct hc_sro4 *rip_sensor;
+
+printk(KERN_INFO "sensor remove\n");
+	rip_sensor = iio_trigger_get_drvdata(swt->trigger);
+	
+	iio_trigger_unregister(swt->trigger);
+
+/* TODO: cancel measurement, wait for measurement to be finished */
+	iio_trigger_free(swt->trigger);
+	kfree(rip_sensor);
+
+	return 0;
+}
+
+static const struct iio_sw_trigger_ops iio_trig_hc_sro4_ops = {
+        .probe          = iio_trig_hc_sro4_probe,
+        .remove         = iio_trig_hc_sro4_remove,
+};
+
+static struct iio_sw_trigger_type iio_trig_hc_sro4 = {
+        .name = "hc-sro4",
+        .owner = THIS_MODULE,
+        .ops = &iio_trig_hc_sro4_ops,
+};
+
+module_iio_sw_trigger_driver(iio_trig_hc_sro4);
 
 MODULE_AUTHOR("Johannes Thoma");
 MODULE_DESCRIPTION("Distance measurement for the HC-SRO4 ultrasonic distance sensor");
