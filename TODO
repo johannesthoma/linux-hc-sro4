@@ -1,0 +1,8 @@
+Configure pins and timeout via configfs.
+
+What does (should do) set_trigger_state exactly (how to test this)?
+
+Why does rmmod not work?
+
+
+

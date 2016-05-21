@@ -49,8 +49,6 @@
 #include <linux/iio/sw_trigger.h>
 
 struct hc_sro4 {
-	int gpio_trig;
-	int gpio_echo;
 	struct gpio_desc *trig_desc;
 	struct gpio_desc *echo_desc;
 	struct timeval time_triggered;
@@ -63,10 +61,13 @@ struct hc_sro4 {
 	struct iio_sw_trigger swt;
 };
 
-static DEFINE_MUTEX(devices_mutex);
+static inline struct hc_sro4 *to_hc_sro4(struct config_item *item)
+{
+	struct iio_sw_trigger *trig = to_iio_sw_trigger(item);
+	return container_of(trig, struct hc_sro4, swt);
+}
 
 static struct hc_sro4 *create_hc_sro4(int trig, int echo, unsigned long timeout)
-		/* must be called with devices_mutex held */
 {
 	struct hc_sro4 *new;
 	int err;
@@ -75,8 +76,6 @@ static struct hc_sro4 *create_hc_sro4(int trig, int echo, unsigned long timeout)
 	if (new == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	new->gpio_echo = echo;
-	new->gpio_trig = trig;
 	new->echo_desc = gpio_to_desc(echo);
 	if (new->echo_desc == NULL) {
 		kfree(new);
@@ -132,10 +131,6 @@ static irqreturn_t echo_received_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-/* devices_mutex must be held by caller, so nobody deletes the device
- * before we lock it.
- */
-
 static int do_measurement(struct hc_sro4 *device,
 			  unsigned long long *usecs_elapsed)
 {
@@ -143,11 +138,12 @@ static int do_measurement(struct hc_sro4 *device,
 	int irq;
 	int ret;
 
+	if (!device->echo_desc || !device->trig_desc) {
+		printk(KERN_INFO "Please configure GPIO pins first.\n");
+	}
 	if (!mutex_trylock(&device->measurement_mutex)) {
-		mutex_unlock(&devices_mutex);
 		return -EBUSY;
 	}
-	mutex_unlock(&devices_mutex);
 
 	msleep(60);
 		/* wait 60 ms between measurements.
@@ -174,7 +170,7 @@ static int do_measurement(struct hc_sro4 *device,
 	gpiod_set_value(device->trig_desc, 0);
 
 	ret = gpiochip_lock_as_irq(gpiod_to_chip(device->echo_desc),
-				   device->gpio_echo);
+				   desc_to_gpio(device->echo_desc));
 	if (ret < 0)
 		goto out_irq;
 
@@ -208,7 +204,6 @@ static ssize_t sysfs_do_measurement(struct device *dev,
 	unsigned long long usecs_elapsed;
 	int status;
 
-	mutex_lock(&devices_mutex);
 	status = do_measurement(sensor, &usecs_elapsed);
 
 	if (status < 0)
@@ -237,14 +232,51 @@ static const struct attribute_group *sensor_groups[] = {
 static ssize_t hc_sro4_echo_pin_store(struct config_item *item,
 				const char *buf, size_t len)
 {
-	printk(KERN_INFO "echo pin is %s\n", buf);
+	struct hc_sro4 *sensor = to_hc_sro4(item);
+	struct gpio_desc *the_desc;
+	int echo;
+
+	if (sscanf(buf, "%d", &echo) < 1)
+		return -EINVAL;
+
+	if (sensor->echo_desc) {
+		if (echo == desc_to_gpio(sensor->echo_desc))
+			return len;
+		gpiod_put(sensor->echo_desc);
+	}
+
+	sensor->echo_desc = gpio_to_desc(echo);
+	if (sensor->echo_desc == NULL)
+		return -EINVAL;
+
+	the_desc = gpiod_get(&sensor->swt.trigger->dev, NULL, GPIOD_IN);
+	if (IS_ERR(the_desc)) {
+		sensor->echo_desc = NULL;
+		return PTR_ERR(the_desc);
+	}
+
+	sensor->echo_desc = the_desc;
 	return len;
 }
 
-CONFIGFS_ATTR_WO(hc_sro4_, echo_pin);
+
+static ssize_t hc_sro4_echo_pin_show(struct config_item *item,
+				     char *buf)
+{
+	struct hc_sro4 *sensor = to_hc_sro4(item);
+	if (sensor->echo_desc)
+		return sprintf(buf, "%d\n", desc_to_gpio(sensor->echo_desc));
+	return 0;
+}
+
+CONFIGFS_ATTR(hc_sro4_, echo_pin);
+/* CONFIGFS_ATTR(hc_sro4_, trigger_pin);
+CONFIGFS_ATTR(hc_sro4_, timeout); */
 
 static struct configfs_attribute *hc_sro4_config_attrs[] = {
 	&hc_sro4_attr_echo_pin,
+/*	&hc_sro4_attr_trigger_pin,
+	&hc_sro4_attr_timeout, */
 	NULL
 };
 
@@ -252,89 +284,6 @@ static struct config_item_type iio_hc_sro4_type = {
         .ct_owner = THIS_MODULE,
 	.ct_attrs = hc_sro4_config_attrs
 };
-
-#if 0
-static struct class hc_sro4_class = {
-	.name = "distance-sensor",
-	.owner = THIS_MODULE,
-	.class_attrs = hc_sro4_class_attrs
-};
-
-
-static int match_device(struct device *dev, const void *data)
-{
-	return dev_get_drvdata(dev) == data;
-}
-
-static int remove_sensor(struct hc_sro4 *rip_sensor)
-	/* must be called with devices_mutex held. */
-{
-	struct device *dev;
-
-	dev = class_find_device(&hc_sro4_class, NULL, rip_sensor, match_device);
-	if (dev == NULL)
-		return -ENODEV;
-
-	mutex_lock(&rip_sensor->measurement_mutex);
-			/* wait until measurement has finished */
-	kfree(rip_sensor);
-
-	device_unregister(dev);
-	put_device(dev);
-
-	return 0;
-}
-
-
-static ssize_t sysfs_configure_store(struct class *class,
-				struct class_attribute *attr,
-				const char *buf, size_t len)
-{
-	int add = buf[0] != '-';
-	const char *s = buf;
-	int trig, echo, timeout;
-	struct hc_sro4 *new_sensor, *rip_sensor;
-	int err;
-
-	if (buf[0] == '-' || buf[0] == '+')
-		s++;
-
-	if (add) {
-		if (sscanf(s, "%d %d %d", &trig, &echo, &timeout) != 3)
-			return -EINVAL;
-
-		mutex_lock(&devices_mutex);
-		if (find_sensor(trig, echo)) {
-			mutex_unlock(&devices_mutex);
-			return -EEXIST;
-		}
-
-		new_sensor = create_hc_sro4(trig, echo, timeout);
-		mutex_unlock(&devices_mutex);
-		if (IS_ERR(new_sensor))
-			return PTR_ERR(new_sensor);
-
-		device_create_with_groups(class, NULL, MKDEV(0, 0), new_sensor,
-				sensor_groups, "distance_%d_%d", trig, echo);
-	} else {
-		if (sscanf(s, "%d %d", &trig, &echo) != 2)
-			return -EINVAL;
-
-		mutex_lock(&devices_mutex);
-		rip_sensor = find_sensor(trig, echo);
-		if (rip_sensor == NULL) {
-			mutex_unlock(&devices_mutex);
-			return -ENODEV;
-		}
-		err = remove_sensor(rip_sensor);
-		mutex_unlock(&devices_mutex);
-		if (err < 0)
-			return err;
-	}
-	return len;
-}
-
-#endif
 
 static int iio_trig_hc_sro4_set_state(struct iio_trigger *trig, bool state)
 {
@@ -363,7 +312,7 @@ static struct iio_sw_trigger *iio_trig_hc_sro4_probe(const char *name)
 
 printk(KERN_INFO "sensor add name = %s\n", name);
 
-	hc_sro4 = create_hc_sro4(23, 24, 3000);  
+	hc_sro4 = create_hc_sro4(23, 25, 3000);  
 		/* TODO: make this configurable via configfs */
 	if (IS_ERR(hc_sro4))
 		return ERR_PTR(PTR_ERR(hc_sro4));
