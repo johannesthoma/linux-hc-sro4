@@ -48,6 +48,8 @@
 #include <linux/iio/trigger.h>
 #include <linux/iio/sw_trigger.h>
 
+#define DEFAULT_TIMEOUT 1000
+
 struct hc_sro4 {
 	struct gpio_desc *trig_desc;
 	struct gpio_desc *echo_desc;
@@ -65,21 +67,6 @@ static inline struct hc_sro4 *to_hc_sro4(struct config_item *item)
 {
 	struct iio_sw_trigger *trig = to_iio_sw_trigger(item);
 	return container_of(trig, struct hc_sro4, swt);
-}
-
-static struct hc_sro4 *create_hc_sro4(unsigned long timeout)
-{
-	struct hc_sro4 *new;
-
-	new = kzalloc(sizeof(*new), GFP_KERNEL);
-	if (new == NULL)
-		return ERR_PTR(-ENOMEM);
-
-	mutex_init(&new->measurement_mutex);
-	init_waitqueue_head(&new->wait_for_echo);
-	new->timeout = timeout;
-
-	return new;
 }
 
 static irqreturn_t echo_received_irq(int irq, void *data)
@@ -315,46 +302,37 @@ static const struct iio_trigger_ops iio_hc_sro4_trigger_ops = {
 
 static struct iio_sw_trigger *iio_trig_hc_sro4_probe(const char *name)
 {
-	struct hc_sro4 *hc_sro4;
+	struct hc_sro4 *sensor;
 	int ret;
 
-printk(KERN_INFO "sensor add name = %s\n", name);
+	sensor = kzalloc(sizeof(*sensor), GFP_KERNEL);
+	if (!sensor)
+		return ERR_PTR(-ENOMEM);
 
-/* 23 24 pins */
-	hc_sro4 = create_hc_sro4(3000);  
-		/* TODO: make this configurable via configfs */
-	if (IS_ERR(hc_sro4))
-		return ERR_PTR(PTR_ERR(hc_sro4));
+	mutex_init(&sensor->measurement_mutex);
+	init_waitqueue_head(&sensor->wait_for_echo);
+	sensor->timeout = DEFAULT_TIMEOUT;
 
-printk(KERN_INFO "create sensor ok\n");
-
-	hc_sro4->swt.trigger = iio_trigger_alloc("%s", name);
-	if (!hc_sro4->swt.trigger) {
+	sensor->swt.trigger = iio_trigger_alloc("%s", name);
+	if (!sensor->swt.trigger) {
 		ret = -ENOMEM;
 		goto err_free_sensor;
 	}
-	iio_trigger_set_drvdata(hc_sro4->swt.trigger, hc_sro4);
-	hc_sro4->swt.trigger->ops = &iio_hc_sro4_trigger_ops;
-	hc_sro4->swt.trigger->dev.groups = sensor_groups;
+	iio_trigger_set_drvdata(sensor->swt.trigger, sensor);
+	sensor->swt.trigger->ops = &iio_hc_sro4_trigger_ops;
+	sensor->swt.trigger->dev.groups = sensor_groups;
 
-	ret = iio_trigger_register(hc_sro4->swt.trigger);
+	ret = iio_trigger_register(sensor->swt.trigger);
 	if (ret)
 		goto err_free_trigger;
 
-/*	kfree(hc_sro4);
-	return ERR_PTR(-ENOMEM); */
-
-printk(KERN_INFO "sensor before group init type name name = %s\n", name);
-/* printk(KERN_INFO "group: %p\n", hc_sro4->swt.group); */
-        iio_swt_group_init_type_name(&hc_sro4->swt, name, &iio_hc_sro4_type);
-
-printk(KERN_INFO "sensor add ok\n");
-	return &hc_sro4->swt;
+        iio_swt_group_init_type_name(&sensor->swt, name, &iio_hc_sro4_type);
+	return &sensor->swt;
 
 err_free_trigger:
-	iio_trigger_free(hc_sro4->swt.trigger);
+	iio_trigger_free(sensor->swt.trigger);
 err_free_sensor:
-	kfree(hc_sro4);
+	kfree(sensor);
 
 	return ERR_PTR(ret);
 }
@@ -363,12 +341,13 @@ static int iio_trig_hc_sro4_remove(struct iio_sw_trigger *swt)
 {
 	struct hc_sro4 *rip_sensor;
 
-printk(KERN_INFO "sensor remove\n");
 	rip_sensor = iio_trigger_get_drvdata(swt->trigger);
 	
 	iio_trigger_unregister(swt->trigger);
 
-/* TODO: cancel measurement, wait for measurement to be finished */
+	/* Wait for measurement to be finished. */
+	mutex_lock(&rip_sensor->measurement_mutex);
+
 	iio_trigger_free(swt->trigger);
 	kfree(rip_sensor);
 
