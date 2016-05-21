@@ -227,9 +227,18 @@ static ssize_t hc_sro4_echo_pin_store(struct config_item *item,
 				const char *buf, size_t len)
 {
 	struct hc_sro4 *sensor = to_hc_sro4(item);
+	ssize_t ret;
+	int err;
 
-	return configure_pin(&sensor->echo_desc, item, buf, len, GPIOD_IN, 
-			     &sensor->swt.trigger->dev);
+	ret = configure_pin(&sensor->echo_desc, item, buf, len, GPIOD_IN, 
+	                    &sensor->swt.trigger->dev);
+
+	if (ret >= 0 && sensor->echo_desc) {
+	        err = gpiod_direction_input(sensor->echo_desc);
+		if (err < 0)
+			return err;
+	}
+	return ret;
 }
 
 static ssize_t hc_sro4_echo_pin_show(struct config_item *item,
@@ -246,11 +255,18 @@ static ssize_t hc_sro4_trig_pin_store(struct config_item *item,
 {
 	struct hc_sro4 *sensor = to_hc_sro4(item);
 	ssize_t ret;
+	int err;
 
-	ret = configure_pin(&sensor->trig_desc, item, buf, len, GPIOD_OUT_HIGH,
+	ret = configure_pin(&sensor->trig_desc, item, buf, len, GPIOD_OUT_LOW,
 			    &sensor->swt.trigger->dev);
-	if (sensor->trig_desc)
-		gpiod_set_value(sensor->trig_desc, 0);
+
+	if (ret >= 0 && sensor->trig_desc) {
+	        err = gpiod_direction_output(sensor->trig_desc, 0);
+		if (err >= 0)
+			gpiod_set_value(sensor->trig_desc, 0);
+		else
+			return err;
+	}
 	return ret;
 }
 
