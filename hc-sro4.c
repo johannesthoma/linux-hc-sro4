@@ -63,10 +63,6 @@ struct hc_sro4 {
 	struct iio_sw_trigger swt;
 };
 
-static struct config_item_type iio_hc_sro4_type = {
-        .ct_owner = THIS_MODULE,
-};
-
 static DEFINE_MUTEX(devices_mutex);
 
 static struct hc_sro4 *create_hc_sro4(int trig, int echo, unsigned long timeout)
@@ -238,16 +234,26 @@ static const struct attribute_group *sensor_groups[] = {
 	NULL
 };
 
-#if 0
-static ssize_t sysfs_configure_store(struct class *class,
-				struct class_attribute *attr,
-				const char *buf, size_t len);
+static ssize_t hc_sro4_echo_pin_store(struct config_item *item,
+				const char *buf, size_t len)
+{
+	printk(KERN_INFO "echo pin is %s\n", buf);
+	return len;
+}
 
-static struct class_attribute hc_sro4_class_attrs[] = {
-	__ATTR(configure, 0200, NULL, sysfs_configure_store),
-	__ATTR_NULL,
+CONFIGFS_ATTR_WO(hc_sro4_, echo_pin);
+
+static struct configfs_attribute *hc_sro4_config_attrs[] = {
+	&hc_sro4_attr_echo_pin,
+	NULL
 };
 
+static struct config_item_type iio_hc_sro4_type = {
+        .ct_owner = THIS_MODULE,
+	.ct_attrs = hc_sro4_config_attrs
+};
+
+#if 0
 static struct class hc_sro4_class = {
 	.name = "distance-sensor",
 	.owner = THIS_MODULE,
