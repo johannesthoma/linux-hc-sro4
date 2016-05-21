@@ -1,8 +1,20 @@
-Configure pins and timeout via configfs.
+Todo:
+-----
+
+Check how gpiod_get() works (how the pins map to names)
 
 What does (should do) set_trigger_state exactly (how to test this)?
 
 Why does rmmod not work?
 
+In progress:
+------------
+
+Configure pins and timeout via configfs.
+	In progress.
+
+
+Done:
+-----
 
 

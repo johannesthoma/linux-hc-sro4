@@ -67,37 +67,13 @@ static inline struct hc_sro4 *to_hc_sro4(struct config_item *item)
 	return container_of(trig, struct hc_sro4, swt);
 }
 
-static struct hc_sro4 *create_hc_sro4(int trig, int echo, unsigned long timeout)
+static struct hc_sro4 *create_hc_sro4(unsigned long timeout)
 {
 	struct hc_sro4 *new;
-	int err;
 
 	new = kzalloc(sizeof(*new), GFP_KERNEL);
 	if (new == NULL)
 		return ERR_PTR(-ENOMEM);
-
-	new->echo_desc = gpio_to_desc(echo);
-	if (new->echo_desc == NULL) {
-		kfree(new);
-		return ERR_PTR(-EINVAL);
-	}
-	new->trig_desc = gpio_to_desc(trig);
-	if (new->trig_desc == NULL) {
-		kfree(new);
-		return ERR_PTR(-EINVAL);
-	}
-
-	err = gpiod_direction_input(new->echo_desc);
-	if (err < 0) {
-		kfree(new);
-		return ERR_PTR(err);
-	}
-	err = gpiod_direction_output(new->trig_desc, 0);
-	if (err < 0) {
-		kfree(new);
-		return ERR_PTR(err);
-	}
-	gpiod_set_value(new->trig_desc, 0);
 
 	mutex_init(&new->measurement_mutex);
 	init_waitqueue_head(&new->wait_for_echo);
@@ -140,6 +116,7 @@ static int do_measurement(struct hc_sro4 *device,
 
 	if (!device->echo_desc || !device->trig_desc) {
 		printk(KERN_INFO "Please configure GPIO pins first.\n");
+		return -EINVAL;
 	}
 	if (!mutex_trylock(&device->measurement_mutex)) {
 		return -EBUSY;
@@ -229,36 +206,44 @@ static const struct attribute_group *sensor_groups[] = {
 	NULL
 };
 
+static ssize_t configure_pin(struct gpio_desc **desc, struct config_item *item,
+			const char *buf, size_t len, enum gpiod_flags flags,
+			struct device *dev)
+{
+	int err;
+	int echo;
+
+	if (*desc) {
+		gpiod_put(*desc);
+	}
+
+	*desc = gpiod_get(dev, buf, flags);
+	if (IS_ERR(*desc)) {
+		err = PTR_ERR(*desc);
+		*desc = NULL;
+
+		if (err == -ENOENT) {	/* fallback: use GPIO numbers */
+			if (sscanf(buf, "%d", &echo) != 1)
+				return -ENOENT;
+			*desc = gpio_to_desc(echo);
+			if (*desc)
+				return len;
+			return -ENOENT;
+		}
+			
+		return err;
+	}
+	return len;
+}
+
 static ssize_t hc_sro4_echo_pin_store(struct config_item *item,
 				const char *buf, size_t len)
 {
 	struct hc_sro4 *sensor = to_hc_sro4(item);
-	struct gpio_desc *the_desc;
-	int echo;
 
-	if (sscanf(buf, "%d", &echo) < 1)
-		return -EINVAL;
-
-	if (sensor->echo_desc) {
-		if (echo == desc_to_gpio(sensor->echo_desc))
-			return len;
-		gpiod_put(sensor->echo_desc);
-	}
-
-	sensor->echo_desc = gpio_to_desc(echo);
-	if (sensor->echo_desc == NULL)
-		return -EINVAL;
-
-	the_desc = gpiod_get(&sensor->swt.trigger->dev, NULL, GPIOD_IN);
-	if (IS_ERR(the_desc)) {
-		sensor->echo_desc = NULL;
-		return PTR_ERR(the_desc);
-	}
-
-	sensor->echo_desc = the_desc;
-	return len;
+	return configure_pin(&sensor->echo_desc, item, buf, len, GPIOD_IN, 
+			     &sensor->swt.trigger->dev);
 }
-
 
 static ssize_t hc_sro4_echo_pin_show(struct config_item *item,
 				     char *buf)
@@ -269,14 +254,37 @@ static ssize_t hc_sro4_echo_pin_show(struct config_item *item,
 	return 0;
 }
 
+static ssize_t hc_sro4_trig_pin_store(struct config_item *item,
+				const char *buf, size_t len)
+{
+	struct hc_sro4 *sensor = to_hc_sro4(item);
+	ssize_t ret;
+
+	ret = configure_pin(&sensor->trig_desc, item, buf, len, GPIOD_OUT_HIGH,
+			    &sensor->swt.trigger->dev);
+	if (sensor->trig_desc)
+		gpiod_set_value(sensor->trig_desc, 0);
+	return ret;
+}
+
+
+static ssize_t hc_sro4_trig_pin_show(struct config_item *item,
+				     char *buf)
+{
+	struct hc_sro4 *sensor = to_hc_sro4(item);
+	if (sensor->trig_desc)
+		return sprintf(buf, "%d\n", desc_to_gpio(sensor->trig_desc));
+	return 0;
+}
+
 CONFIGFS_ATTR(hc_sro4_, echo_pin);
-/* CONFIGFS_ATTR(hc_sro4_, trigger_pin);
-CONFIGFS_ATTR(hc_sro4_, timeout); */
+CONFIGFS_ATTR(hc_sro4_, trig_pin);
+/* CONFIGFS_ATTR(hc_sro4_, timeout); */
 
 static struct configfs_attribute *hc_sro4_config_attrs[] = {
 	&hc_sro4_attr_echo_pin,
-/*	&hc_sro4_attr_trigger_pin,
-	&hc_sro4_attr_timeout, */
+	&hc_sro4_attr_trig_pin,
+/*	&hc_sro4_attr_timeout, */
 	NULL
 };
 
@@ -312,7 +320,8 @@ static struct iio_sw_trigger *iio_trig_hc_sro4_probe(const char *name)
 
 printk(KERN_INFO "sensor add name = %s\n", name);
 
-	hc_sro4 = create_hc_sro4(23, 25, 3000);  
+/* 23 24 pins */
+	hc_sro4 = create_hc_sro4(3000);  
 		/* TODO: make this configurable via configfs */
 	if (IS_ERR(hc_sro4))
 		return ERR_PTR(PTR_ERR(hc_sro4));
