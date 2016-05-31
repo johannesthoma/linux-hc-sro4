@@ -1,7 +1,7 @@
 About
 -----
 
-The HC-SRO4 is an ultrasonic distance sensor to be attached on 2 5V GPIO pins. 
+The HC-SR04 is an ultrasonic distance sensor to be attached on 2 5V GPIO pins. 
 This driver uses the interrupt logic of the GPIO driver to measure the 
 distance in a non-blocking, precise and load-independend way. Unlike 
 user land measurement methods you can even compile a linux kernel 
@@ -10,7 +10,7 @@ while doing measurements without getting weird results.
 The driver has been tested using a Raspberry Pi 1, but in theory should
 work on any device that supports GPIO hardware. 
 
-Keep in mind that the HC-SRO4 is a 5 volts device so attatching it directly
+Keep in mind that the HC-SR04 is a 5 volts device so attatching it directly
 to the raspberry (3.3 Volts) pins is probably not a good idea. There
 are tutorials on the net explaining how to solder 2 resistors such that
 it works with the 3.3 Volts pins.
@@ -68,7 +68,7 @@ Using the driver
 Once insmod works, you'll find a new directory under /sys/class/distance
 (subject to change).
 
-This supports an (in theory) unlimited number of HC-SRO4 devices.
+This supports an (in theory) unlimited number of HC-SR04 devices.
 To add a device, do a (as root):
 
 ```

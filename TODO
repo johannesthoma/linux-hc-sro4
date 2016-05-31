@@ -1,31 +1,14 @@
 Todo:
 -----
 
-hc-sro4 or hc-sr04?
-
-update comment / write linux/Documentation/ .. .txt
-
 What does (should do) set_trigger_state exactly (how to test this)?
 	Power management?
+	Currently unused.
 
 To test:
 --------
 
-printk -> dev_info -> iio_dev_info or remove.
-
-make timeout configurable.
-
-msleep() in measurement
-
 symbolic names in pin config (need to define in device tree).
-
-timeout / HZ?
-
-export device name.
-
-enum measurement_state
-
-do not configure in gpiod_get
 
 test with 2 sensors.
 
@@ -34,6 +17,26 @@ In progress:
 
 Done:
 -----
+
+update comment / write linux/Documentation/ .. .txt
+
+hc-sro4 or hc-sr04?
+	hc-sr04 (see datasheet)
+
+do not configure in gpiod_get
+
+enum measurement_state
+
+export device name.
+
+make timeout configurable.
+
+timeout / HZ?
+
+
+printk -> dev_info -> iio_dev_info or remove.
+
+msleep() in measurement
 
 cleanup code: make checkpatch --strict work.
 	Redo this on change.

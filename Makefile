@@ -1,4 +1,4 @@
-obj-m += hc-sro4.o
+obj-m += hc-sr04.o
 
 ARCH=arm
 CROSS_COMPILE=$(HOME)/raspberry/cross-dev/tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian-x64/bin/arm-linux-gnueabihf-
