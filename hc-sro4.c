@@ -53,27 +53,36 @@ enum hc_sro4_state {
 };
 
 struct hc_sro4 {
+		/* the GPIOs of ECHO and TRIG */
 	struct gpio_desc *trig_desc;
 	struct gpio_desc *echo_desc;
+		/* Used to measure length of ECHO signal */
 	struct timeval time_triggered;
 	struct timeval time_echoed;
+		/* protects against starting multiple measurements */
 	struct mutex measurement_mutex;
+		/* Current state of measurement */
 	enum hc_sro4_state state;
+		/* Used by interrupt to wake measurement routine up */
 	wait_queue_head_t wait_for_echo;
+		/* timeout in ms, fail when no echo received within that time */
 	unsigned long timeout;
+		/* Our IIO interface */
 	struct iio_sw_trigger swt;
+		/* Used to compute device settle time */
 	struct timeval last_measurement;
 };
 
 static inline struct hc_sro4 *to_hc_sro4(struct config_item *item)
 {
 	struct iio_sw_trigger *trig = to_iio_sw_trigger(item);
+
 	return container_of(trig, struct hc_sro4, swt);
 }
 
 static irqreturn_t echo_received_irq(int irq, void *data)
 {
-	struct hc_sro4 *device = (struct hc_sro4 *) data;
+	struct hc_sro4 *device = (struct hc_sro4 *)data;
 	int val;
 	struct timeval irq_tv;
 
@@ -109,9 +118,8 @@ static int do_measurement(struct hc_sro4 *device,
 		dev_dbg(&device->swt.trigger->dev, "Please configure GPIO pins first.\n");
 		return -EINVAL;
 	}
-	if (!mutex_trylock(&device->measurement_mutex)) {
+	if (!mutex_trylock(&device->measurement_mutex))
 		return -EBUSY;
-	}
 
 	do_gettimeofday(&now);
 	if (device->last_measurement.tv_sec || device->last_measurement.tv_usec)
@@ -120,25 +128,29 @@ static int do_measurement(struct hc_sro4 *device,
 	(now.tv_usec - device->last_measurement.tv_usec);
 	else
 		time_since_last_measurement = 60000;
-	
-	msleep(max(60 - time_since_last_measurement / 1000, (long long) 0));
+
 		/* wait 60 ms between measurements.
 		 * now, a while true ; do cat measure ; done should work
 		 */
+
+	if (time_since_last_measurement < 60000 &&
+	    time_since_last_measurement >= 0)
+		msleep(60 - (int)time_since_last_measurement / 1000);
 
 	irq = gpiod_to_irq(device->echo_desc);
 	if (irq < 0)
 		return -EIO;
 
 	ret = request_any_context_irq(irq, echo_received_irq,
-		IRQF_SHARED | IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
-		"hc_sro4", device);
+				      IRQF_SHARED | IRQF_TRIGGER_FALLING |
+				      IRQF_TRIGGER_RISING,
+				      "hc_sro4", device);
 
 	if (ret < 0)
 		goto out_mutex;
 
 	gpiod_set_value(device->trig_desc, 1);
-	udelay(10);
+	usleep_range(10, 20);
 	device->state = DEVICE_TRIGGERED;
 	gpiod_set_value(device->trig_desc, 0);
 
@@ -147,17 +159,18 @@ static int do_measurement(struct hc_sro4 *device,
 	if (ret < 0)
 		goto out_irq;
 
-	timeout = wait_event_interruptible_timeout(device->wait_for_echo,
-			device->state == DEVICE_ECHO_RECEIVED, 
+	timeout = wait_event_interruptible_timeout(
+			device->wait_for_echo,
+			device->state == DEVICE_ECHO_RECEIVED,
 			device->timeout * HZ / 1000);
 
 	device->state = DEVICE_IDLE;
 
-	if (timeout == 0)
+	if (timeout == 0) {
 		ret = -ETIMEDOUT;
-	else if (timeout < 0)
+	} else if (timeout < 0) {
 		ret = timeout;
-	else {
+	} else {
 		*usecs_elapsed =
 	(device->time_echoed.tv_sec - device->time_triggered.tv_sec) * 1000000 +
 	(device->time_echoed.tv_usec - device->time_triggered.tv_usec);
@@ -165,7 +178,7 @@ static int do_measurement(struct hc_sro4 *device,
 		do_gettimeofday(&device->last_measurement);
 	}
 	gpiochip_unlock_as_irq(gpiod_to_chip(device->echo_desc),
-		               desc_to_gpio(device->echo_desc));
+			       desc_to_gpio(device->echo_desc));
 out_irq:
 	free_irq(irq, device);
 out_mutex:
@@ -192,7 +205,6 @@ static ssize_t sysfs_do_measurement(struct device *dev,
 
 DEVICE_ATTR(measure, 0444, sysfs_do_measurement, NULL);
 
-
 static struct attribute *sensor_attrs[] = {
 	&dev_attr_measure.attr,
 	NULL,
@@ -208,47 +220,46 @@ static const struct attribute_group *sensor_groups[] = {
 };
 
 static ssize_t configure_pin(struct gpio_desc **desc, struct config_item *item,
-			const char *buf, size_t len, enum gpiod_flags flags,
-			struct device *dev)
+			     const char *buf, size_t len, struct device *dev)
 {
 	int err;
 	int echo;
 
-	if (*desc) {
+	if (*desc)
 		gpiod_put(*desc);
-	}
 
-	*desc = gpiod_get(dev, buf, flags);
+	*desc = gpiod_get(dev, buf, GPIOD_ASIS);
 	if (IS_ERR(*desc)) {
 		err = PTR_ERR(*desc);
 		*desc = NULL;
 
 		if (err == -ENOENT) {	/* fallback: use GPIO numbers */
-			if (sscanf(buf, "%d", &echo) != 1)
+			err = kstrtoint(buf, 10, &echo);
+			if (err < 0)
 				return -ENOENT;
 			*desc = gpio_to_desc(echo);
 			if (*desc)
 				return len;
 			return -ENOENT;
 		}
-			
+
 		return err;
 	}
 	return len;
 }
 
 static ssize_t hc_sro4_echo_pin_store(struct config_item *item,
-				const char *buf, size_t len)
+				      const char *buf, size_t len)
 {
 	struct hc_sro4 *sensor = to_hc_sro4(item);
 	ssize_t ret;
 	int err;
 
-	ret = configure_pin(&sensor->echo_desc, item, buf, len, GPIOD_ASIS, 
-	                    &sensor->swt.trigger->dev);
+	ret = configure_pin(&sensor->echo_desc, item, buf, len,
+			    &sensor->swt.trigger->dev);
 
 	if (ret >= 0 && sensor->echo_desc) {
-	        err = gpiod_direction_input(sensor->echo_desc);
+		err = gpiod_direction_input(sensor->echo_desc);
 		if (err < 0)
 			return err;
 	}
@@ -259,23 +270,24 @@ static ssize_t hc_sro4_echo_pin_show(struct config_item *item,
 				     char *buf)
 {
 	struct hc_sro4 *sensor = to_hc_sro4(item);
+
 	if (sensor->echo_desc)
 		return sprintf(buf, "%d\n", desc_to_gpio(sensor->echo_desc));
 	return 0;
 }
 
 static ssize_t hc_sro4_trig_pin_store(struct config_item *item,
-				const char *buf, size_t len)
+				      const char *buf, size_t len)
 {
 	struct hc_sro4 *sensor = to_hc_sro4(item);
 	ssize_t ret;
 	int err;
 
-	ret = configure_pin(&sensor->trig_desc, item, buf, len, GPIOD_ASIS,
+	ret = configure_pin(&sensor->trig_desc, item, buf, len,
 			    &sensor->swt.trigger->dev);
 
 	if (ret >= 0 && sensor->trig_desc) {
-	        err = gpiod_direction_output(sensor->trig_desc, 0);
+		err = gpiod_direction_output(sensor->trig_desc, 0);
 		if (err >= 0)
 			gpiod_set_value(sensor->trig_desc, 0);
 		else
@@ -284,45 +296,46 @@ static ssize_t hc_sro4_trig_pin_store(struct config_item *item,
 	return ret;
 }
 
-
- 
 static ssize_t hc_sro4_trig_pin_show(struct config_item *item,
-                                     char *buf)
+				     char *buf)
 {
-        struct hc_sro4 *sensor = to_hc_sro4(item);
+	struct hc_sro4 *sensor = to_hc_sro4(item);
+
 	if (sensor->trig_desc)
 		return sprintf(buf, "%d\n", desc_to_gpio(sensor->trig_desc));
 	return 0;
 }
 
 static ssize_t hc_sro4_timeout_store(struct config_item *item,
-				const char *buf, size_t len)
+				     const char *buf, size_t len)
 {
 	struct hc_sro4 *sensor = to_hc_sro4(item);
 	unsigned long t;
+	int ret;
 
-	if (sscanf(buf, "%ld", &t) != 1)
-		return -EINVAL;
+	ret = kstrtol(buf, 10, &t);
+	if (ret < 0)
+		return ret;
+
 	sensor->timeout = t;
 	return len;
 }
 
-
 static ssize_t hc_sro4_timeout_show(struct config_item *item,
-			            char *buf)
+				    char *buf)
 {
 	struct hc_sro4 *sensor = to_hc_sro4(item);
+
 	return sprintf(buf, "%ld\n", sensor->timeout);
 }
 
-
 static ssize_t hc_sro4_dev_name_show(struct config_item *item,
-			             char *buf)
+				     char *buf)
 {
 	struct hc_sro4 *sensor = to_hc_sro4(item);
+
 	return sprintf(buf, "%s", dev_name(&sensor->swt.trigger->dev));
 }
-
 
 CONFIGFS_ATTR(hc_sro4_, echo_pin);
 CONFIGFS_ATTR(hc_sro4_, trig_pin);
@@ -338,29 +351,18 @@ static struct configfs_attribute *hc_sro4_config_attrs[] = {
 };
 
 static struct config_item_type iio_hc_sro4_type = {
-        .ct_owner = THIS_MODULE,
+	.ct_owner = THIS_MODULE,
 	.ct_attrs = hc_sro4_config_attrs
 };
 
 static int iio_trig_hc_sro4_set_state(struct iio_trigger *trig, bool state)
 {
-        struct iio_hrtimer_info *trig_info;
-
-        trig_info = iio_trigger_get_drvdata(trig);
-
-/* TODO: when is this function called? Powersafe? */
-        if (state)
-		printk(KERN_INFO "starting HC_SRO4\n");
-        else
-		printk(KERN_INFO "stopping HC_SRO4\n");
-
-        return 0;
+	return 0;
 }
 
-
 static const struct iio_trigger_ops iio_hc_sro4_trigger_ops = {
-        .owner = THIS_MODULE,
-        .set_trigger_state = iio_trig_hc_sro4_set_state,
+	.owner = THIS_MODULE,
+	.set_trigger_state = iio_trig_hc_sro4_set_state,
 };
 
 static struct iio_sw_trigger *iio_trig_hc_sro4_probe(const char *name)
@@ -389,7 +391,7 @@ static struct iio_sw_trigger *iio_trig_hc_sro4_probe(const char *name)
 	if (ret)
 		goto err_free_trigger;
 
-        iio_swt_group_init_type_name(&sensor->swt, name, &iio_hc_sro4_type);
+	iio_swt_group_init_type_name(&sensor->swt, name, &iio_hc_sro4_type);
 	return &sensor->swt;
 
 err_free_trigger:
@@ -405,7 +407,7 @@ static int iio_trig_hc_sro4_remove(struct iio_sw_trigger *swt)
 	struct hc_sro4 *rip_sensor;
 
 	rip_sensor = iio_trigger_get_drvdata(swt->trigger);
-	
+
 	iio_trigger_unregister(swt->trigger);
 
 	/* Wait for measurement to be finished. */
@@ -418,14 +420,14 @@ static int iio_trig_hc_sro4_remove(struct iio_sw_trigger *swt)
 }
 
 static const struct iio_sw_trigger_ops iio_trig_hc_sro4_ops = {
-        .probe          = iio_trig_hc_sro4_probe,
-        .remove         = iio_trig_hc_sro4_remove,
+	.probe          = iio_trig_hc_sro4_probe,
+	.remove         = iio_trig_hc_sro4_remove,
 };
 
 static struct iio_sw_trigger_type iio_trig_hc_sro4 = {
-        .name = "hc-sro4",
-        .owner = THIS_MODULE,
-        .ops = &iio_trig_hc_sro4_ops,
+	.name = "hc-sro4",
+	.owner = THIS_MODULE,
+	.ops = &iio_trig_hc_sro4_ops,
 };
 
 module_iio_sw_trigger_driver(iio_trig_hc_sro4);

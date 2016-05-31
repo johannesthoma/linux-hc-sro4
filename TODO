@@ -1,12 +1,12 @@
 Todo:
 -----
 
+hc-sro4 or hc-sr04?
+
 update comment / write linux/Documentation/ .. .txt
 
 What does (should do) set_trigger_state exactly (how to test this)?
 	Power management?
-
-cleanup code: make checkpatch --strict work.
 
 To test:
 --------
@@ -34,6 +34,9 @@ In progress:
 
 Done:
 -----
+
+cleanup code: make checkpatch --strict work.
+	Redo this on change.
 
 Check how gpiod_get() works (how the pins map to names)
 	Must create device tree entry for that. TODO: test this.
