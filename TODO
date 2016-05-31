@@ -1,11 +1,26 @@
 Todo:
 -----
 
-Check how gpiod_get() works (how the pins map to names)
+make timeout configurable.
+
+timeout / HZ?
+
+link to device in /sys or export device name.
+
+printk -> dev_info -> iio_dev_info or remove.
+
+update comment / write linux/Documentation/ .. .txt
+
+enum measurement_state
 
 What does (should do) set_trigger_state exactly (how to test this)?
+	Power management?
 
-Why does rmmod not work?
+cleanup code: make checkpatch --strict work.
+
+test with 2 sensors.
+
+do not configure in gpiod_get (??)
 
 In progress:
 ------------
@@ -13,8 +28,14 @@ In progress:
 Configure pins and timeout via configfs.
 	In progress.
 
+Check how gpiod_get() works (how the pins map to names)
+	Must create device tree entry for that. TODO: test this.
+	For now use the integer based interface
 
 Done:
 -----
+
+Why does rmmod not work?
+	Kernel was compiled without rmmod support.
 
 

@@ -342,6 +342,7 @@ static struct iio_sw_trigger *iio_trig_hc_sro4_probe(const char *name)
 	if (ret)
 		goto err_free_trigger;
 
+printk(KERN_INFO "dev name = %s\n", dev_name(&sensor->swt.trigger->dev));
         iio_swt_group_init_type_name(&sensor->swt, name, &iio_hc_sro4_type);
 	return &sensor->swt;
 
