@@ -107,7 +107,7 @@ static int do_measurement(struct hc_sro4 *device,
 	*usecs_elapsed = -1;
 
 	if (!device->echo_desc || !device->trig_desc) {
-		printk(KERN_INFO "Please configure GPIO pins first.\n");
+		dev_dbg(&device->swt.trigger->dev, "Please configure GPIO pins first.\n");
 		return -EINVAL;
 	}
 	if (!mutex_trylock(&device->measurement_mutex)) {
@@ -317,14 +317,24 @@ static ssize_t hc_sro4_timeout_show(struct config_item *item,
 }
 
 
+static ssize_t hc_sro4_dev_name_show(struct config_item *item,
+			             char *buf)
+{
+	struct hc_sro4 *sensor = to_hc_sro4(item);
+	return sprintf(buf, "%s", dev_name(&sensor->swt.trigger->dev));
+}
+
+
 CONFIGFS_ATTR(hc_sro4_, echo_pin);
 CONFIGFS_ATTR(hc_sro4_, trig_pin);
 CONFIGFS_ATTR(hc_sro4_, timeout);
+CONFIGFS_ATTR_RO(hc_sro4_, dev_name);
 
 static struct configfs_attribute *hc_sro4_config_attrs[] = {
 	&hc_sro4_attr_echo_pin,
 	&hc_sro4_attr_trig_pin,
 	&hc_sro4_attr_timeout,
+	&hc_sro4_attr_dev_name,
 	NULL
 };
 
@@ -339,6 +349,7 @@ static int iio_trig_hc_sro4_set_state(struct iio_trigger *trig, bool state)
 
         trig_info = iio_trigger_get_drvdata(trig);
 
+/* TODO: when is this function called? Powersafe? */
         if (state)
 		printk(KERN_INFO "starting HC_SRO4\n");
         else
@@ -379,7 +390,6 @@ static struct iio_sw_trigger *iio_trig_hc_sro4_probe(const char *name)
 	if (ret)
 		goto err_free_trigger;
 
-printk(KERN_INFO "dev name = %s\n", dev_name(&sensor->swt.trigger->dev));
         iio_swt_group_init_type_name(&sensor->swt, name, &iio_hc_sro4_type);
 	return &sensor->swt;
 

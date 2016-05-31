@@ -1,10 +1,6 @@
 Todo:
 -----
 
-timeout / HZ?
-
-link to device in /sys or export device name.
-
 printk -> dev_info -> iio_dev_info or remove.
 
 update comment / write linux/Documentation/ .. .txt
@@ -29,6 +25,9 @@ msleep() in measurement
 
 symbolic names in pin config (need to define in device tree).
 
+timeout / HZ?
+
+export device name.
 
 In progress:
 ------------
