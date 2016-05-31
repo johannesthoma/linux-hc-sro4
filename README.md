@@ -65,35 +65,28 @@ happy to help out.
 Using the driver
 ----------------
 
-Once insmod works, you'll find a new directory under /sys/class/distance
-(subject to change).
+This driver uses IIO software triggers to interface with userland.
 
-This supports an (in theory) unlimited number of HC-SR04 devices.
-To add a device, do a (as root):
+To configure a device do a
 
-```
-   # echo 23 24 1000 > /sys/class/distance-sensor/configure
-```
+   mkdir /config/iio/triggers/hc-sr04/sensor0
 
-(23 is the trigger GPIO, 24 is the echo GPIO and 1000 is a timeout in
-milliseconds)
+(you need to mount configfs to /config first)
 
-Then a directory appears with a file measure in it. To measure, do a
+Then configure the ECHO and TRIG pins (this also accepts symbolic names
+configured in the device tree)
 
-```
-   # cat /sys/class/distance-sensor/distance_23_24/measure
-```
+   echo 23 > /config/iio/triggers/hc-sr04/sensor0/trig_pin
+   echo 24 > /config/iio/triggers/hc-sr04/sensor0/echo_pin
 
-You'll receive the length of the echo signal in usecs. To convert (roughly)
-to centimeters multiply by 17150 and divide by 1e6.
+Then you can measure distance with:
 
-To deconfigure the device, do a
+   cat /sys/devices/trigger0/measure
 
-```
-   # echo -23 24 > /sys/class/distance-sensor/configure
-```
+(trigger0 is the device name as reported by
+ /config/iio/triggers/hc-sr04/sensor0/dev_name
 
-(normally not needed).
+To convert to centimeters, multiply by 17150 and divide by 1000000 (air)
 
 That's all.
 
