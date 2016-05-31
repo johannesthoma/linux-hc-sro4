@@ -50,14 +50,19 @@
 
 #define DEFAULT_TIMEOUT 1000
 
+enum hc_sro4_state {
+	DEVICE_IDLE,
+	DEVICE_TRIGGERED,
+	DEVICE_ECHO_RECEIVED
+};
+
 struct hc_sro4 {
 	struct gpio_desc *trig_desc;
 	struct gpio_desc *echo_desc;
 	struct timeval time_triggered;
 	struct timeval time_echoed;
-	int echo_received;
-	int device_triggered;
 	struct mutex measurement_mutex;
+	enum hc_sro4_state state;
 	wait_queue_head_t wait_for_echo;
 	unsigned long timeout;
 	struct iio_sw_trigger swt;
@@ -78,9 +83,7 @@ static irqreturn_t echo_received_irq(int irq, void *data)
 
 	do_gettimeofday(&irq_tv);
 
-	if (!device->device_triggered)
-		return IRQ_HANDLED;
-	if (device->echo_received)
+	if (device->state != DEVICE_TRIGGERED)
 		return IRQ_HANDLED;
 
 	val = gpiod_get_value(device->echo_desc);
@@ -88,7 +91,7 @@ static irqreturn_t echo_received_irq(int irq, void *data)
 		device->time_triggered = irq_tv;
 	} else {
 		device->time_echoed = irq_tv;
-		device->echo_received = 1;
+		device->state = DEVICE_ECHO_RECEIVED;
 		wake_up_interruptible(&device->wait_for_echo);
 	}
 
@@ -131,9 +134,6 @@ static int do_measurement(struct hc_sro4 *device,
 	if (irq < 0)
 		return -EIO;
 
-	device->echo_received = 0;
-	device->device_triggered = 0;
-
 	ret = request_any_context_irq(irq, echo_received_irq,
 		IRQF_SHARED | IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
 		"hc_sro4", device);
@@ -143,7 +143,7 @@ static int do_measurement(struct hc_sro4 *device,
 
 	gpiod_set_value(device->trig_desc, 1);
 	udelay(10);
-	device->device_triggered = 1;
+	device->state = DEVICE_TRIGGERED;
 	gpiod_set_value(device->trig_desc, 0);
 
 	ret = gpiochip_lock_as_irq(gpiod_to_chip(device->echo_desc),
@@ -152,7 +152,10 @@ static int do_measurement(struct hc_sro4 *device,
 		goto out_irq;
 
 	timeout = wait_event_interruptible_timeout(device->wait_for_echo,
-			device->echo_received, device->timeout * HZ / 1000);
+			device->state == DEVICE_ECHO_RECEIVED, 
+			device->timeout * HZ / 1000);
+
+	device->state = DEVICE_IDLE;
 
 	if (timeout == 0)
 		ret = -ETIMEDOUT;

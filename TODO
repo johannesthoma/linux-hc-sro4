@@ -1,8 +1,6 @@
 Todo:
 -----
 
-printk -> dev_info -> iio_dev_info or remove.
-
 update comment / write linux/Documentation/ .. .txt
 
 enum measurement_state
@@ -18,6 +16,8 @@ do not configure in gpiod_get (??)
 
 To test:
 --------
+
+printk -> dev_info -> iio_dev_info or remove.
 
 make timeout configurable.
 
