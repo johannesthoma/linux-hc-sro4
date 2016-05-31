@@ -69,19 +69,25 @@ This driver uses IIO software triggers to interface with userland.
 
 To configure a device do a
 
+```
    mkdir /config/iio/triggers/hc-sr04/sensor0
+```
 
 (you need to mount configfs to /config first)
 
 Then configure the ECHO and TRIG pins (this also accepts symbolic names
 configured in the device tree)
 
+```
    echo 23 > /config/iio/triggers/hc-sr04/sensor0/trig_pin
    echo 24 > /config/iio/triggers/hc-sr04/sensor0/echo_pin
+```
 
 Then you can measure distance with:
 
+```
    cat /sys/devices/trigger0/measure
+```
 
 (trigger0 is the device name as reported by
  /config/iio/triggers/hc-sr04/sensor0/dev_name
