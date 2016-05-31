@@ -61,6 +61,7 @@ struct hc_sro4 {
 	wait_queue_head_t wait_for_echo;
 	unsigned long timeout;
 	struct iio_sw_trigger swt;
+	struct timeval last_measurement;
 };
 
 static inline struct hc_sro4 *to_hc_sro4(struct config_item *item)
@@ -100,6 +101,8 @@ static int do_measurement(struct hc_sro4 *device,
 	long timeout;
 	int irq;
 	int ret;
+	struct timeval now;
+	long long time_since_last_measurement;
 
 	if (!device->echo_desc || !device->trig_desc) {
 		printk(KERN_INFO "Please configure GPIO pins first.\n");
@@ -109,7 +112,15 @@ static int do_measurement(struct hc_sro4 *device,
 		return -EBUSY;
 	}
 
-	msleep(60);
+	do_gettimeofday(&now);
+	if (device->last_measurement.tv_sec || device->last_measurement.tv_usec)
+		time_since_last_measurement =
+	(now.tv_sec - device->last_measurement.tv_sec) * 1000000 +
+	(now.tv_usec - device->last_measurement.tv_usec);
+	else
+		time_since_last_measurement = 60000;
+	
+	msleep(max(60 - time_since_last_measurement / 1000, (long long) 0));
 		/* wait 60 ms between measurements.
 		 * now, a while true ; do cat measure ; done should work
 		 */
@@ -139,7 +150,7 @@ static int do_measurement(struct hc_sro4 *device,
 		goto out_irq;
 
 	timeout = wait_event_interruptible_timeout(device->wait_for_echo,
-				device->echo_received, device->timeout);
+			device->echo_received, device->timeout * HZ / 1000);
 
 	if (timeout == 0)
 		ret = -ETIMEDOUT;
@@ -150,6 +161,7 @@ static int do_measurement(struct hc_sro4 *device,
 	(device->time_echoed.tv_sec - device->time_triggered.tv_sec) * 1000000 +
 	(device->time_echoed.tv_usec - device->time_triggered.tv_usec);
 		ret = 0;
+		do_gettimeofday(&device->last_measurement);
 	}
 /* TODO: unlock_as_irq */
 out_irq:

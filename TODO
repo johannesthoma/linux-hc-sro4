@@ -1,8 +1,6 @@
 Todo:
 -----
 
-make timeout configurable.
-
 timeout / HZ?
 
 link to device in /sys or export device name.
@@ -22,18 +20,28 @@ test with 2 sensors.
 
 do not configure in gpiod_get (??)
 
+To test:
+--------
+
+make timeout configurable.
+
+msleep() in measurement
+
+symbolic names in pin config (need to define in device tree).
+
+
 In progress:
 ------------
 
-Configure pins and timeout via configfs.
-	In progress.
+Done:
+-----
 
 Check how gpiod_get() works (how the pins map to names)
 	Must create device tree entry for that. TODO: test this.
 	For now use the integer based interface
 
-Done:
------
+Configure pins and timeout via configfs.
+	In progress.
 
 Why does rmmod not work?
 	Kernel was compiled without rmmod support.
