@@ -8,10 +8,6 @@ What does (should do) set_trigger_state exactly (how to test this)?
 
 cleanup code: make checkpatch --strict work.
 
-test with 2 sensors.
-
-do not configure in gpiod_get (??)
-
 To test:
 --------
 
@@ -28,6 +24,10 @@ timeout / HZ?
 export device name.
 
 enum measurement_state
+
+do not configure in gpiod_get
+
+test with 2 sensors.
 
 In progress:
 ------------

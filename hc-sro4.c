@@ -1,3 +1,19 @@
+/*
+ * hc-sro4.c - Support for HC-SRO4 ultrasonic range sensor
+ *
+ * Copyright (C) 2016 Johannes Thoma <johannes@johannesthoma.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ */
+
 /* Precise measurements of time delta between sending a trigger signal
  * to the HC-SRO4 distance sensor and receiving the echo signal from
  * the sensor back. This has to be precise in the usecs range. We
@@ -7,7 +23,6 @@
  *
  * DO NOT attach your HC-SRO4's echo pin directly to the raspberry, since
  * it runs with 5V while raspberry expects 3V on the GPIO inputs.
- *
  */
 
 #include <linux/kernel.h>
