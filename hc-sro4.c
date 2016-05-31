@@ -96,13 +96,15 @@ static irqreturn_t echo_received_irq(int irq, void *data)
 }
 
 static int do_measurement(struct hc_sro4 *device,
-			  unsigned long long *usecs_elapsed)
+			  long long *usecs_elapsed)
 {
 	long timeout;
 	int irq;
 	int ret;
 	struct timeval now;
 	long long time_since_last_measurement;
+
+	*usecs_elapsed = -1;
 
 	if (!device->echo_desc || !device->trig_desc) {
 		printk(KERN_INFO "Please configure GPIO pins first.\n");
@@ -163,7 +165,8 @@ static int do_measurement(struct hc_sro4 *device,
 		ret = 0;
 		do_gettimeofday(&device->last_measurement);
 	}
-/* TODO: unlock_as_irq */
+	gpiochip_unlock_as_irq(gpiod_to_chip(device->echo_desc),
+		               desc_to_gpio(device->echo_desc));
 out_irq:
 	free_irq(irq, device);
 out_mutex:
@@ -177,7 +180,7 @@ static ssize_t sysfs_do_measurement(struct device *dev,
 				    char *buf)
 {
 	struct hc_sro4 *sensor = dev_get_drvdata(dev);
-	unsigned long long usecs_elapsed;
+	long long usecs_elapsed;
 	int status;
 
 	status = do_measurement(sensor, &usecs_elapsed);
