@@ -4,25 +4,6 @@
  * use trigger interrupts to measure the signal, so no busy wait :)
  *
  * This supports an (in theory) unlimited number of HC-SRO4 devices.
- * To add a device, do a (as root):
- *
- *	# echo 23 24 1000 > /sys/class/distance-sensor/configure
- *
- * (23 is the trigger GPIO, 24 is the echo GPIO and 1000 is a timeout in
- *  milliseconds)
- *
- * Then a directory appears with a file measure in it. To measure, do a
- *
- *	# cat /sys/class/distance-sensor/distance_23_24/measure
- *
- * You'll receive the length of the echo signal in usecs. To convert (roughly)
- * to centimeters multiply by 17150 and divide by 1e6.
- *
- * To deconfigure the device, do a
- *
- *	# echo -23 24 > /sys/class/distance-sensor/configure
- *
- * (normally not needed).
  *
  * DO NOT attach your HC-SRO4's echo pin directly to the raspberry, since
  * it runs with 5V while raspberry expects 3V on the GPIO inputs.
@@ -248,7 +229,7 @@ static ssize_t hc_sro4_echo_pin_store(struct config_item *item,
 	ssize_t ret;
 	int err;
 
-	ret = configure_pin(&sensor->echo_desc, item, buf, len, GPIOD_IN, 
+	ret = configure_pin(&sensor->echo_desc, item, buf, len, GPIOD_ASIS, 
 	                    &sensor->swt.trigger->dev);
 
 	if (ret >= 0 && sensor->echo_desc) {
@@ -275,7 +256,7 @@ static ssize_t hc_sro4_trig_pin_store(struct config_item *item,
 	ssize_t ret;
 	int err;
 
-	ret = configure_pin(&sensor->trig_desc, item, buf, len, GPIOD_OUT_LOW,
+	ret = configure_pin(&sensor->trig_desc, item, buf, len, GPIOD_ASIS,
 			    &sensor->swt.trigger->dev);
 
 	if (ret >= 0 && sensor->trig_desc) {

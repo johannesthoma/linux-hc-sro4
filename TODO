@@ -3,8 +3,6 @@ Todo:
 
 update comment / write linux/Documentation/ .. .txt
 
-enum measurement_state
-
 What does (should do) set_trigger_state exactly (how to test this)?
 	Power management?
 
@@ -28,6 +26,8 @@ symbolic names in pin config (need to define in device tree).
 timeout / HZ?
 
 export device name.
+
+enum measurement_state
 
 In progress:
 ------------
