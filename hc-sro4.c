@@ -271,23 +271,45 @@ static ssize_t hc_sro4_trig_pin_store(struct config_item *item,
 }
 
 
+ 
 static ssize_t hc_sro4_trig_pin_show(struct config_item *item,
-				     char *buf)
+                                     char *buf)
 {
-	struct hc_sro4 *sensor = to_hc_sro4(item);
+        struct hc_sro4 *sensor = to_hc_sro4(item);
 	if (sensor->trig_desc)
 		return sprintf(buf, "%d\n", desc_to_gpio(sensor->trig_desc));
 	return 0;
 }
 
+static ssize_t hc_sro4_timeout_store(struct config_item *item,
+				const char *buf, size_t len)
+{
+	struct hc_sro4 *sensor = to_hc_sro4(item);
+	unsigned long t;
+
+	if (sscanf(buf, "%ld", &t) != 1)
+		return -EINVAL;
+	sensor->timeout = t;
+	return len;
+}
+
+
+static ssize_t hc_sro4_timeout_show(struct config_item *item,
+			            char *buf)
+{
+	struct hc_sro4 *sensor = to_hc_sro4(item);
+	return sprintf(buf, "%ld\n", sensor->timeout);
+}
+
+
 CONFIGFS_ATTR(hc_sro4_, echo_pin);
 CONFIGFS_ATTR(hc_sro4_, trig_pin);
-/* CONFIGFS_ATTR(hc_sro4_, timeout); */
+CONFIGFS_ATTR(hc_sro4_, timeout);
 
 static struct configfs_attribute *hc_sro4_config_attrs[] = {
 	&hc_sro4_attr_echo_pin,
 	&hc_sro4_attr_trig_pin,
-/*	&hc_sro4_attr_timeout, */
+	&hc_sro4_attr_timeout,
 	NULL
 };
 
