@@ -24,9 +24,10 @@
  *
  * To configure a device do a
  *
- *    mkdir /config/iio/triggers/hc-sr04/sensor0
+ *    mkdir /sys/kernel/config/iio/triggers/hc-sr04/sensor0
  *
- * (you need to mount configfs to /config first)
+ * (you need to mount configfs to /sys/kernel/config first unless it isn't
+ * mounted already)
  *
  * Then configure the ECHO and TRIG pins (this also accepts symbolic names
  * configured in the device tree)
@@ -40,6 +41,9 @@
  *
  * (trigger0 is the device name as reported by
  *  /config/iio/triggers/hc-sr04/sensor0/dev_name
+ *
+ * This reports the length of the ECHO signal in microseconds, which is
+ * related linearily to the distance measured.
  *
  * To convert to centimeters, multiply by 17150 and divide by 1000000 (air)
  *
@@ -160,8 +164,10 @@ static int do_measurement(struct hc_sr04 *device,
 		msleep(60 - (int)time_since_last_measurement / 1000);
 
 	irq = gpiod_to_irq(device->echo_desc);
-	if (irq < 0)
-		return -EIO;
+	if (irq < 0) {
+		ret = -EIO;
+		goto out_mutex;
+	}
 
 	ret = request_any_context_irq(irq, echo_received_irq,
 				      IRQF_SHARED | IRQF_TRIGGER_FALLING |
