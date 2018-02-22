@@ -233,19 +233,24 @@ static const struct attribute_group *sensor_groups[] = {
 	NULL
 };
 
-static ssize_t sysfs_configure_store(struct class *class,
+static ssize_t configure_store(struct class *class,
 				struct class_attribute *attr,
 				const char *buf, size_t len);
+static CLASS_ATTR_WO(configure);
 
-static struct class_attribute hc_sro4_class_attrs[] = {
-	__ATTR(configure, 0200, NULL, sysfs_configure_store),
-	__ATTR_NULL,
+
+static struct attribute *class_hc_sro4_attrs[] = {
+	&class_attr_configure.attr,
+	NULL
 };
+ATTRIBUTE_GROUPS(class_hc_sro4);
+
+
 
 static struct class hc_sro4_class = {
 	.name = "distance-sensor",
 	.owner = THIS_MODULE,
-	.class_attrs = hc_sro4_class_attrs
+	.class_groups = class_hc_sro4_groups
 };
 
 
@@ -286,7 +291,7 @@ static int remove_sensor(struct hc_sro4 *rip_sensor)
 	return 0;
 }
 
-static ssize_t sysfs_configure_store(struct class *class,
+static ssize_t configure_store(struct class *class,
 				struct class_attribute *attr,
 				const char *buf, size_t len)
 {
