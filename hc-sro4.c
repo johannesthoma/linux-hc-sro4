@@ -173,7 +173,7 @@ static int do_measurement(struct hc_sro4 *device,
 	gpiod_set_value(device->trig_desc, 0);
 
 	ret = gpiochip_lock_as_irq(gpiod_to_chip(device->echo_desc),
-				   device->gpio_echo);
+				   device->gpio_echo % 32);
 	if (ret < 0)
 		goto out_irq;
 
